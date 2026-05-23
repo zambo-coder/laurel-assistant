@@ -41,9 +41,9 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(new URL('/login', request.url))
   }
 
-  // Email whitelist check
-  const allowedEmail = process.env.ALLOWED_EMAIL
-  if (allowedEmail && user.email !== allowedEmail) {
+  // Email whitelist check (comma-separated list supported)
+  const allowedEmails = process.env.ALLOWED_EMAIL?.split(',').map(e => e.trim().toLowerCase()) ?? []
+  if (allowedEmails.length > 0 && !allowedEmails.includes(user.email?.toLowerCase() ?? '')) {
     await supabase.auth.signOut()
     return NextResponse.redirect(new URL('/login?error=unauthorized', request.url))
   }

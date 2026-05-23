@@ -1,0 +1,167 @@
+'use client'
+
+import { useState, useRef, useEffect } from 'react'
+import { BrandProfile } from '@/types'
+import Button from '@/components/ui/Button'
+
+interface Message {
+  role: 'user' | 'assistant'
+  content: string
+}
+
+const STARTERS = [
+  'What should I focus on this week?',
+  'Give me a caption idea for a flat-lay photo',
+  'How can I attract more inquiries?',
+  'Draft an out-of-office reply',
+]
+
+export default function DashboardChat({ brand }: { brand: BrandProfile | null }) {
+  const [messages, setMessages] = useState<Message[]>([])
+  const [input, setInput] = useState('')
+  const [streaming, setStreaming] = useState(false)
+  const bottomRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLTextAreaElement>(null)
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [messages])
+
+  async function send(text?: string) {
+    const content = (text ?? input).trim()
+    if (!content || streaming) return
+
+    const newMessages: Message[] = [...messages, { role: 'user', content }]
+    setMessages(newMessages)
+    setInput('')
+    setStreaming(true)
+
+    const assistantMsg: Message = { role: 'assistant', content: '' }
+    setMessages([...newMessages, assistantMsg])
+
+    try {
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages: newMessages }),
+      })
+
+      if (!res.ok || !res.body) throw new Error('Failed')
+
+      const reader = res.body.getReader()
+      const decoder = new TextDecoder()
+      let accumulated = ''
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        accumulated += decoder.decode(value, { stream: true })
+        setMessages([...newMessages, { role: 'assistant', content: accumulated }])
+      }
+    } catch {
+      setMessages([...newMessages, { role: 'assistant', content: 'Something went wrong. Please try again.' }])
+    } finally {
+      setStreaming(false)
+    }
+  }
+
+  function handleKey(e: React.KeyboardEvent) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      send()
+    }
+  }
+
+  const isEmpty = messages.length === 0
+
+  return (
+    <div className="flex flex-col" style={{ height: '420px' }}>
+      {/* Messages */}
+      <div className="flex-1 overflow-y-auto px-3 py-2 space-y-4">
+        {isEmpty ? (
+          <div className="h-full flex flex-col items-center justify-center text-center px-4">
+            <div className="text-2xl mb-3">✦</div>
+            <p className="text-sm font-medium mb-1" style={{ color: 'var(--foreground)' }}>
+              Hi{brand?.business_name ? `, ${brand.business_name.split(' ')[0]}` : ''}
+            </p>
+            <p className="text-xs mb-5" style={{ color: 'var(--muted)' }}>
+              What can I help you with today?
+            </p>
+            <div className="flex flex-col gap-2 w-full max-w-xs">
+              {STARTERS.map((s) => (
+                <button
+                  key={s}
+                  onClick={() => send(s)}
+                  className="text-xs px-3 py-2 rounded-lg text-left transition-all hover:opacity-80"
+                  style={{ background: 'var(--cream-200,#f4efe6)', color: 'var(--stone-600,#655a4d)' }}
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : (
+          messages.map((msg, i) => (
+            <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+              <div
+                className="max-w-[85%] px-3.5 py-2.5 rounded-xl text-sm leading-relaxed whitespace-pre-wrap"
+                style={
+                  msg.role === 'user'
+                    ? { background: 'var(--foreground)', color: 'var(--background)' }
+                    : { background: 'var(--cream-200,#f4efe6)', color: 'var(--foreground)' }
+                }
+              >
+                {msg.content}
+                {msg.role === 'assistant' && streaming && i === messages.length - 1 && msg.content === '' && (
+                  <span className="inline-flex gap-1">
+                    <span className="w-1 h-1 rounded-full bg-current animate-bounce" style={{ animationDelay: '0ms' }} />
+                    <span className="w-1 h-1 rounded-full bg-current animate-bounce" style={{ animationDelay: '150ms' }} />
+                    <span className="w-1 h-1 rounded-full bg-current animate-bounce" style={{ animationDelay: '300ms' }} />
+                  </span>
+                )}
+                {msg.role === 'assistant' && streaming && i === messages.length - 1 && msg.content !== '' && (
+                  <span className="streaming-cursor" />
+                )}
+              </div>
+            </div>
+          ))
+        )}
+        <div ref={bottomRef} />
+      </div>
+
+      {/* Input */}
+      <div className="px-3 pb-3 pt-2 border-t" style={{ borderColor: 'var(--border)' }}>
+        <div className="flex items-end gap-2">
+          <textarea
+            ref={inputRef}
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={handleKey}
+            placeholder="Ask me anything…"
+            rows={1}
+            className="flex-1 px-3.5 py-2.5 rounded-xl text-sm outline-none resize-none transition-all"
+            style={{
+              background: 'var(--background)',
+              border: '1.5px solid var(--border)',
+              color: 'var(--foreground)',
+              maxHeight: '120px',
+            }}
+            onFocus={(e) => (e.target.style.borderColor = 'var(--accent)')}
+            onBlur={(e) => (e.target.style.borderColor = 'var(--border)')}
+            onInput={(e) => {
+              const el = e.currentTarget
+              el.style.height = 'auto'
+              el.style.height = Math.min(el.scrollHeight, 120) + 'px'
+            }}
+          />
+          <Button size="sm" onClick={() => send()} disabled={!input.trim() || streaming}>
+            ↑
+          </Button>
+        </div>
+        <p className="text-[10px] mt-1.5 ml-1" style={{ color: 'var(--muted)' }}>
+          Enter to send · Shift+Enter for new line
+        </p>
+      </div>
+    </div>
+  )
+}

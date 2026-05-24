@@ -38,11 +38,18 @@ export interface CalendarDay {
   format: 'reel' | 'carousel' | 'story' | 'static'
 }
 
+export interface CalendarFramework {
+  posts_per_week: number
+  posting_days: number[]  // 0=Sun, 1=Mon, ... 6=Sat
+  monthly_focus: string
+}
+
 export interface ContentCalendar {
   id: string
   user_id: string
   month_year: string
   days: CalendarDay[]
+  framework?: CalendarFramework
   created_at: string
   updated_at: string
 }

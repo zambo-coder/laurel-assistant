@@ -3,7 +3,7 @@ import { anthropic, MODEL } from '@/lib/anthropic'
 import { buildBrandSystemPrompt } from '@/lib/brand-context'
 import { streamToResponse } from '@/lib/stream'
 import { NextRequest } from 'next/server'
-import { CalendarDay } from '@/types'
+import { CalendarDay, CalendarFramework } from '@/types'
 
 export async function GET(req: NextRequest) {
   const supabase = await createClient()
@@ -27,32 +27,57 @@ export async function POST(req: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return new Response('Unauthorized', { status: 401 })
 
-  const { month_year, focus, days_in_month } = await req.json()
+  const { month_year, days_in_month, framework } = await req.json() as {
+    month_year: string
+    days_in_month: number
+    framework: CalendarFramework
+  }
 
   const { data: brand } = await supabase.from('brand_profile').select('*').single()
   if (!brand) return new Response('Brand profile not found', { status: 404 })
 
+  // Save framework to brand profile for reuse next month
+  void supabase.from('brand_profile').update({
+    calendar_framework: framework,
+    updated_at: new Date().toISOString(),
+  }).eq('user_id', user.id)
+
+  const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+  const postingDayNames = framework.posting_days.map(d => DAY_NAMES[d]).join(', ')
+
+  // Calculate which calendar days (1–N) are posting days
+  const [year, month] = month_year.split('-').map(Number)
+  const postingCalendarDays: number[] = []
+  for (let d = 1; d <= days_in_month; d++) {
+    const dow = new Date(year, month - 1, d).getDay()
+    if (framework.posting_days.includes(dow)) postingCalendarDays.push(d)
+  }
+
   const systemPrompt = `${buildBrandSystemPrompt(brand)}
 
-Generate a ${days_in_month}-day Instagram content calendar for ${month_year}.
-Output EXACTLY ${days_in_month} lines — one per day — in this pipe-delimited format with NO extra text:
-DAY_1|format|theme|post_idea
-DAY_2|format|theme|post_idea
-...
+Generate an Instagram content calendar for ${month_year}.
+
+POSTING SCHEDULE (agreed by user):
+- Post ONLY on these days of the week: ${postingDayNames}
+- That gives ${postingCalendarDays.length} posts this month on days: ${postingCalendarDays.join(', ')}
+- Output ONLY lines for these ${postingCalendarDays.length} days — nothing else
+${framework.monthly_focus ? `- MONTHLY FOCUS: ${framework.monthly_focus}` : ''}
+
+Output format — one line per posting day, pipe-delimited, NO extra text:
+DAY_<number>|format|theme|post_idea
 
 Rules:
-- format must be one of: reel, carousel, story, static
-- theme: 2-5 words (e.g. "Behind the scenes", "Client feature", "Design process")
-- post_idea: one concrete, actionable sentence describing the post content
-- Vary formats: ~30% reels, ~25% carousels, ~25% static, ~20% stories
-- Mix content pillars: design process, finished work, personal brand, client stories, tips, seasonal`
+- format: reel, carousel, story, or static — vary naturally across the month
+- theme: 2-5 words
+- post_idea: one concrete, specific sentence
+- Mix content: finished work, design process, personal brand, client stories, tips`
 
   try {
     const stream = anthropic.messages.stream({
       model: MODEL,
-      max_tokens: 3000,
+      max_tokens: 2000,
       system: systemPrompt,
-      messages: [{ role: 'user', content: `Create content calendar for ${month_year}.${focus ? ` Focus: ${focus}` : ''}` }],
+      messages: [{ role: 'user', content: `Create the content calendar for ${month_year}.` }],
     })
 
     stream.finalMessage().then(msg => {
@@ -63,6 +88,7 @@ Rules:
           user_id: user.id,
           month_year,
           days,
+          framework,
           updated_at: new Date().toISOString(),
         })
       }
@@ -90,7 +116,7 @@ export async function PATCH(req: NextRequest) {
       model: MODEL,
       max_tokens: 200,
       system: `${buildBrandSystemPrompt(brand)}\nOutput exactly one line: DAY_${day}|format|theme|post_idea`,
-      messages: [{ role: 'user', content: `Regenerate day ${day} for ${month_year}.` }],
+      messages: [{ role: 'user', content: `Suggest a new post idea for day ${day} of ${month_year}.` }],
     })
 
     const text = message.content[0].type === 'text' ? message.content[0].text : ''

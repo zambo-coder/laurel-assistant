@@ -3,7 +3,8 @@
     "allow": [
       "Bash(npm list *)",
       "Bash(npx tsc *)",
-      "PowerShell(Get-ChildItem -Path \"C:\\\\Users\\\\asts8\\\\laurel-assistant\\\\app\\\\api\" -Recurse -File | Select-Object -ExpandProperty FullName | ForEach-Object { $_.Replace\\(\"C:\\\\Users\\\\asts8\\\\laurel-assistant\\\\\", \"\"\\) })"
+      "PowerShell(Get-ChildItem -Path \"C:\\\\Users\\\\asts8\\\\laurel-assistant\\\\app\\\\api\" -Recurse -File | Select-Object -ExpandProperty FullName | ForEach-Object { $_.Replace\\(\"C:\\\\Users\\\\asts8\\\\laurel-assistant\\\\\", \"\"\\) })",
+      "Bash(npx next *)"
     ]
   }
 }

@@ -34,12 +34,11 @@ const nav = [
       { href: '/opportunities', icon: '◆', label: 'Opportunities' },
       { href: '/roi', icon: '◎', label: 'ROI Tracker' },
       { href: '/strategy', icon: '◈', label: 'Strategy Advisor' },
-      { href: '/settings', icon: '⊙', label: 'Settings' },
     ],
   },
 ]
 
-export default function Sidebar() {
+export default function Sidebar({ brandName }: { brandName?: string }) {
   const pathname = usePathname()
   const router = useRouter()
 
@@ -58,17 +57,17 @@ export default function Sidebar() {
       <div className="px-3 mb-7">
         <div className="flex items-center gap-2.5">
           <div
-            className="w-7 h-7 rounded-full flex items-center justify-center text-xs shrink-0"
+            className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold shrink-0 uppercase"
             style={{ background: 'var(--foreground)', color: 'var(--background)' }}
           >
-            ✦
+            {brandName ? brandName.charAt(0) : '✦'}
           </div>
           <div>
-            <div className="text-sm font-semibold leading-none" style={{ color: 'var(--foreground)' }}>
-              Co-pilot
+            <div className="text-sm font-semibold leading-none truncate max-w-[120px]" style={{ color: 'var(--foreground)' }}>
+              {brandName || 'Studio'}
             </div>
             <div className="text-xs mt-0.5" style={{ color: 'var(--muted)' }}>
-              Studio Assistant
+              AI Assistant
             </div>
           </div>
         </div>
@@ -109,11 +108,23 @@ export default function Sidebar() {
         ))}
       </nav>
 
-      {/* Sign out */}
-      <div className="mt-6 px-3">
+      {/* Settings + Sign out */}
+      <div className="mt-6 px-3 space-y-1">
+        <Link
+          href="/settings"
+          className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-all"
+          style={{
+            background: pathname === '/settings' ? 'var(--cream-200, #f4efe6)' : 'transparent',
+            color: pathname === '/settings' ? 'var(--foreground)' : 'var(--stone-500, #7c6e5e)',
+            fontWeight: pathname === '/settings' ? '500' : '400',
+          }}
+        >
+          <span className="text-base w-4 text-center shrink-0">⚙</span>
+          Settings
+        </Link>
         <button
           onClick={handleSignOut}
-          className="w-full text-left text-xs py-2 transition-opacity hover:opacity-70"
+          className="w-full text-left text-xs px-3 py-2 transition-opacity hover:opacity-70"
           style={{ color: 'var(--muted)' }}
         >
           Sign out

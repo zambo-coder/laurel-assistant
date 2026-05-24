@@ -46,7 +46,11 @@ export default function DashboardChat({ brand }: { brand: BrandProfile | null })
         body: JSON.stringify({ messages: newMessages }),
       })
 
-      if (!res.ok || !res.body) throw new Error('Failed')
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        throw new Error(body.error ?? `Request failed (${res.status})`)
+      }
+      if (!res.body) throw new Error('No response body')
 
       const reader = res.body.getReader()
       const decoder = new TextDecoder()
@@ -58,8 +62,9 @@ export default function DashboardChat({ brand }: { brand: BrandProfile | null })
         accumulated += decoder.decode(value, { stream: true })
         setMessages([...newMessages, { role: 'assistant', content: accumulated }])
       }
-    } catch {
-      setMessages([...newMessages, { role: 'assistant', content: 'Something went wrong. Please try again.' }])
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Something went wrong.'
+      setMessages([...newMessages, { role: 'assistant', content: `⚠ ${message}` }])
     } finally {
       setStreaming(false)
     }

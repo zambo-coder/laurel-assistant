@@ -50,7 +50,7 @@ export default async function DashboardPage() {
         <div className="col-span-3">
           <Card padding="sm">
             <div className="px-2 pt-2 pb-1 mb-3 flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full bg-[--sage-500,#7a9478]" />
+              <div className="w-2 h-2 rounded-full" style={{ background: '#7a9478' }} />
               <span className="text-sm font-medium" style={{ color: 'var(--foreground)' }}>AI Assistant</span>
               <span className="text-xs ml-auto" style={{ color: 'var(--muted)' }}>Knows your brand</span>
             </div>
@@ -58,8 +58,40 @@ export default async function DashboardPage() {
           </Card>
         </div>
 
-        {/* Recent activity */}
+        {/* Right column */}
         <div className="col-span-2 space-y-4">
+          {/* Website card */}
+          {brand?.website_url && (
+            <Card padding="sm">
+              <div className="px-2 pt-2 pb-1 mb-3">
+                <p className="text-sm font-medium" style={{ color: 'var(--foreground)' }}>Website</p>
+              </div>
+              <div className="px-2 space-y-2 pb-2">
+                <a
+                  href={brand.website_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1.5 text-xs hover:opacity-70 transition-opacity"
+                  style={{ color: 'var(--foreground)' }}
+                >
+                  <span>◑</span>
+                  <span className="underline underline-offset-2 truncate">{brand.website_url.replace(/^https?:\/\//, '')}</span>
+                </a>
+                <a
+                  href="https://account.squarespace.com/analytics"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1.5 text-xs hover:opacity-70 transition-opacity"
+                  style={{ color: 'var(--muted)' }}
+                >
+                  <span>◎</span>
+                  <span className="underline underline-offset-2">Squarespace Analytics →</span>
+                </a>
+              </div>
+            </Card>
+          )}
+
+          {/* Recent captions */}
           <Card padding="sm">
             <div className="px-2 pt-2 pb-1 mb-3">
               <p className="text-sm font-medium" style={{ color: 'var(--foreground)' }}>Recent captions</p>
@@ -87,6 +119,7 @@ export default async function DashboardPage() {
             </div>
           </Card>
 
+          {/* Recent inquiries */}
           <Card padding="sm">
             <div className="px-2 pt-2 pb-1 mb-3">
               <p className="text-sm font-medium" style={{ color: 'var(--foreground)' }}>Recent inquiries</p>

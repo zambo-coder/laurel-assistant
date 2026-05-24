@@ -9,6 +9,7 @@ export interface BrandProfile {
   business_goals: string
   instagram_handle: string
   languages: string[]
+  website_url: string
   created_at: string
   updated_at: string
 }

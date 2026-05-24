@@ -20,6 +20,7 @@ export default function SettingsForm({ initialData }: { initialData: BrandProfil
     services_pricing: initialData?.services_pricing ?? '',
     business_goals: initialData?.business_goals ?? '',
     instagram_handle: initialData?.instagram_handle ?? '',
+    website_url: initialData?.website_url ?? '',
     languages: initialData?.languages ?? ['Spanish', 'English', 'Danish'],
   })
 
@@ -77,6 +78,7 @@ export default function SettingsForm({ initialData }: { initialData: BrandProfil
               />
             </div>
           </div>
+          <Input label="Website URL" value={form.website_url} onChange={(e) => update('website_url', e.target.value)} placeholder="https://yourstudio.squarespace.com" />
           <div>
             <label className="block text-sm font-medium mb-2" style={{ color: 'var(--foreground)' }}>Working languages</label>
             <div className="flex gap-2">

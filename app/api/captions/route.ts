@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { anthropic, MODEL } from '@/lib/anthropic'
 import { buildBrandSystemPrompt } from '@/lib/brand-context'
+import { streamToResponse } from '@/lib/stream'
 import { NextRequest } from 'next/server'
 
 export async function POST(req: NextRequest) {
@@ -36,54 +37,42 @@ LOCAL_TAGS_2: [hashtags]
 
 Write hashtags as space-separated strings starting with #. Make each caption feel distinct.`
 
-  const stream = await anthropic.messages.stream({
-    model: MODEL,
-    max_tokens: 2048,
-    system: systemPrompt,
-    messages: [{ role: 'user', content: `Post description: ${prompt}` }],
-  })
+  try {
+    const stream = anthropic.messages.stream({
+      model: MODEL,
+      max_tokens: 2048,
+      system: systemPrompt,
+      messages: [{ role: 'user', content: `Post description: ${prompt}` }],
+    })
 
-  const encoder = new TextEncoder()
-  let fullText = ''
-
-  const readable = new ReadableStream({
-    async start(controller) {
-      for await (const chunk of stream) {
-        if (chunk.type === 'content_block_delta' && chunk.delta.type === 'text_delta') {
-          fullText += chunk.delta.text
-          controller.enqueue(encoder.encode(chunk.delta.text))
-        }
-      }
-
-      // Save to history after streaming completes
-      try {
-        const parsed = parseCaptions(fullText)
-        await supabase.from('caption_history').insert({
+    // Save to history after stream completes (non-blocking)
+    stream.finalMessage().then(msg => {
+      const fullText = msg.content[0].type === 'text' ? msg.content[0].text : ''
+      const parsed = parseCaptions(fullText)
+      if (parsed.length > 0) {
+        void supabase.from('caption_history').insert({
           user_id: user.id,
           prompt,
           captions: parsed,
         })
-      } catch { /* non-critical */ }
+      }
+    }).catch(() => {})
 
-      controller.close()
-    },
-  })
-
-  return new Response(readable, {
-    headers: { 'Content-Type': 'text/plain; charset=utf-8' },
-  })
+    return streamToResponse(stream)
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'AI request failed'
+    return Response.json({ error: message }, { status: 500 })
+  }
 }
 
 function parseCaptions(text: string) {
   const captions = []
   const blocks = text.split('---').map(b => b.trim()).filter(Boolean)
-
   for (const block of blocks) {
     const captionMatch = block.match(/CAPTION_\d+:\n([\s\S]*?)(?=\nNICHE_TAGS)/i)
     const nicheMatch = block.match(/NICHE_TAGS_\d+:\s*(.+)/i)
     const broadMatch = block.match(/BROAD_TAGS_\d+:\s*(.+)/i)
     const localMatch = block.match(/LOCAL_TAGS_\d+:\s*(.+)/i)
-
     if (captionMatch) {
       captions.push({
         text: captionMatch[1].trim(),
@@ -95,6 +84,5 @@ function parseCaptions(text: string) {
       })
     }
   }
-
   return captions
 }

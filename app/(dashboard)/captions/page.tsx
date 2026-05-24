@@ -39,7 +39,11 @@ export default function CaptionsPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prompt }),
       })
-      if (!res.ok || !res.body) throw new Error('Generation failed')
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        throw new Error(body.error ?? `Request failed (${res.status})`)
+      }
+      if (!res.body) throw new Error('No response body')
 
       const reader = res.body.getReader()
       const decoder = new TextDecoder()
@@ -55,8 +59,9 @@ export default function CaptionsPage() {
       const parsed = parseCaptions(full)
       setCaptions(parsed)
       setActiveHashtag({})
-    } catch {
-      toast.error('Generation failed. Please try again.')
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Generation failed.'
+      toast.error(message)
     } finally {
       setStreaming(false)
     }

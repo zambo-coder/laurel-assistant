@@ -2,15 +2,16 @@
 
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { useSearchParams } from 'next/navigation'
+import { useSearchParams, useRouter } from 'next/navigation'
 
 export default function LoginForm() {
   const [email, setEmail] = useState('')
-  const [sent, setSent] = useState(false)
+  const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const searchParams = useSearchParams()
   const urlError = searchParams.get('error')
+  const router = useRouter()
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault()
@@ -18,19 +19,14 @@ export default function LoginForm() {
     setError(null)
 
     const supabase = createClient()
-    const { error } = await supabase.auth.signInWithOtp({
-      email,
-      options: {
-        emailRedirectTo: `${window.location.origin}/api/auth/callback`,
-      },
-    })
+    const { error } = await supabase.auth.signInWithPassword({ email, password })
 
     if (error) {
-      setError(error.message)
+      setError('Incorrect email or password.')
       setLoading(false)
     } else {
-      setSent(true)
-      setLoading(false)
+      router.push('/dashboard')
+      router.refresh()
     }
   }
 
@@ -58,68 +54,54 @@ export default function LoginForm() {
           </div>
         )}
 
-        {urlError === 'auth_failed' && (
-          <div className="mb-5 p-3.5 rounded-lg text-sm text-center"
-            style={{ background: '#fdf0f0', border: '1px solid #f5c6c6', color: '#8b3030' }}>
-            Authentication failed. Please try again.
+        <form onSubmit={handleLogin} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium mb-1.5" style={{ color: 'var(--foreground)' }}>
+              Email
+            </label>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="your@email.com"
+              required
+              className="w-full px-4 py-2.5 rounded-lg text-sm outline-none transition-all"
+              style={{ background: '#ffffff', border: '1.5px solid var(--border)', color: 'var(--foreground)' }}
+              onFocus={(e) => (e.target.style.borderColor = 'var(--accent)')}
+              onBlur={(e) => (e.target.style.borderColor = 'var(--border)')}
+            />
           </div>
-        )}
 
-        {sent ? (
-          <div className="text-center">
-            <div className="text-3xl mb-4">✉️</div>
-            <h2 className="text-lg font-medium mb-2" style={{ color: 'var(--foreground)' }}>
-              Check your email
-            </h2>
-            <p className="text-sm leading-relaxed" style={{ color: 'var(--muted)' }}>
-              We sent a magic link to <strong>{email}</strong>.<br />
-              Click the link to sign in.
-            </p>
-            <button
-              onClick={() => { setSent(false); setEmail('') }}
-              className="mt-6 text-sm underline underline-offset-2"
-              style={{ color: 'var(--muted)' }}
-            >
-              Use a different email
-            </button>
+          <div>
+            <label className="block text-sm font-medium mb-1.5" style={{ color: 'var(--foreground)' }}>
+              Password
+            </label>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="••••••••"
+              required
+              className="w-full px-4 py-2.5 rounded-lg text-sm outline-none transition-all"
+              style={{ background: '#ffffff', border: '1.5px solid var(--border)', color: 'var(--foreground)' }}
+              onFocus={(e) => (e.target.style.borderColor = 'var(--accent)')}
+              onBlur={(e) => (e.target.style.borderColor = 'var(--border)')}
+            />
           </div>
-        ) : (
-          <form onSubmit={handleLogin} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium mb-1.5" style={{ color: 'var(--foreground)' }}>
-                Email address
-              </label>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="your@email.com"
-                required
-                className="w-full px-4 py-2.5 rounded-lg text-sm outline-none transition-all"
-                style={{
-                  background: '#ffffff',
-                  border: '1.5px solid var(--border)',
-                  color: 'var(--foreground)',
-                }}
-                onFocus={(e) => (e.target.style.borderColor = 'var(--accent)')}
-                onBlur={(e) => (e.target.style.borderColor = 'var(--border)')}
-              />
-            </div>
 
-            {error && (
-              <p className="text-sm" style={{ color: '#8b3030' }}>{error}</p>
-            )}
+          {error && (
+            <p className="text-sm" style={{ color: '#8b3030' }}>{error}</p>
+          )}
 
-            <button
-              type="submit"
-              disabled={loading || !email}
-              className="w-full py-2.5 rounded-lg text-sm font-medium transition-all disabled:opacity-50"
-              style={{ background: 'var(--foreground)', color: '#faf8f4' }}
-            >
-              {loading ? 'Sending…' : 'Send magic link'}
-            </button>
-          </form>
-        )}
+          <button
+            type="submit"
+            disabled={loading || !email || !password}
+            className="w-full py-2.5 rounded-lg text-sm font-medium transition-all disabled:opacity-50"
+            style={{ background: 'var(--foreground)', color: '#faf8f4' }}
+          >
+            {loading ? 'Signing in…' : 'Sign in'}
+          </button>
+        </form>
       </div>
     </div>
   )

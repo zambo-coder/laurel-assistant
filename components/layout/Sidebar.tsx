@@ -114,13 +114,17 @@ export default function Sidebar({ brandName, logoUrl }: { brandName?: string; lo
         </div>
       </div>
 
-      {/* Dashboard — always visible */}
-      <div className="mb-4">
-        {(() => {
-          const active = pathname === '/dashboard'
+      {/* Dashboard + Chat — always visible */}
+      <div className="mb-4 space-y-0.5">
+        {[
+          { href: '/dashboard', icon: '◈', label: 'Dashboard' },
+          { href: '/chat', icon: '✦', label: 'AI Assistant' },
+        ].map(item => {
+          const active = pathname === item.href
           return (
             <Link
-              href="/dashboard"
+              key={item.href}
+              href={item.href}
               className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-all"
               style={{
                 background: active ? 'var(--sidebar-active)' : 'transparent',
@@ -128,11 +132,11 @@ export default function Sidebar({ brandName, logoUrl }: { brandName?: string; lo
                 fontWeight: active ? '500' : '400',
               }}
             >
-              <span className="text-base w-4 text-center shrink-0">◈</span>
-              Dashboard
+              <span className="text-base w-4 text-center shrink-0">{item.icon}</span>
+              {item.label}
             </Link>
           )
-        })()}
+        })}
       </div>
 
       {/* Collapsible sections */}

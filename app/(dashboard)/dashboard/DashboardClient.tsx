@@ -147,14 +147,16 @@ export default function DashboardClient({
 
       {/* Main content grid */}
       <div className="grid grid-cols-5 gap-6">
-        {/* AI Chat */}
+        {/* AI Chat shortcut */}
         {has('chat') && (
           <div className={has('website_card') || has('recent_captions') || has('top_opportunities') || has('upcoming_posts') ? 'col-span-3' : 'col-span-5'}>
-            <Card padding="sm">
+            <Card padding="sm" className="flex flex-col">
               <div className="px-2 pt-2 pb-1 mb-3 flex items-center gap-2">
                 <div className="w-2 h-2 rounded-full" style={{ background: '#7a9478' }} />
                 <span className="text-sm font-medium" style={{ color: 'var(--foreground)' }}>AI Assistant</span>
-                <span className="text-xs ml-auto" style={{ color: 'var(--muted)' }}>Knows your brand</span>
+                <Link href="/chat" className="text-xs ml-auto underline underline-offset-2 hover:opacity-70 transition-opacity" style={{ color: 'var(--muted)' }}>
+                  Open full chat →
+                </Link>
               </div>
               <DashboardChat brand={brand} />
             </Card>

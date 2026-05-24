@@ -98,7 +98,7 @@ export default function DashboardChat({ brand }: { brand: BrandProfile | null })
                   key={s}
                   onClick={() => send(s)}
                   className="text-xs px-3 py-2 rounded-lg text-left transition-all hover:opacity-80"
-                  style={{ background: 'var(--cream-200,#f4efe6)', color: 'var(--stone-600,#655a4d)' }}
+                  style={{ background: 'var(--cream-200)', color: 'var(--stone-600)' }}
                 >
                   {s}
                 </button>
@@ -113,7 +113,7 @@ export default function DashboardChat({ brand }: { brand: BrandProfile | null })
                 style={
                   msg.role === 'user'
                     ? { background: 'var(--foreground)', color: 'var(--background)' }
-                    : { background: 'var(--cream-200,#f4efe6)', color: 'var(--foreground)' }
+                    : { background: 'var(--cream-200)', color: 'var(--foreground)' }
                 }
               >
                 {msg.content}

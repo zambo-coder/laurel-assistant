@@ -39,6 +39,13 @@
   --muted: #978b7c;
   --accent: #c4a06a;
   --sidebar-active: #f4efe6;
+  --cream-200: #f4efe6;
+  --stone-600: #655a4d;
+  --badge-reel: #e8f4ec;
+  --badge-carousel: #e8eef8;
+  --badge-story: #f8f0e8;
+  --badge-static: #f4f0f8;
+  --pending-bg: #fef3e2;
 }
 
 .dark {
@@ -49,6 +56,13 @@
   --muted: #8a7d6e;
   --accent: #c4a06a;
   --sidebar-active: #2e2820;
+  --cream-200: #2e2820;
+  --stone-600: #a8998a;
+  --badge-reel: #1a2e1e;
+  --badge-carousel: #1a1e2e;
+  --badge-story: #2e1e10;
+  --badge-static: #1e1a2e;
+  --pending-bg: #2e2008;
 }
 
 body {

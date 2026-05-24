@@ -10,10 +10,10 @@ import { CalendarDay, CalendarFramework } from '@/types'
 // ─── Constants ───────────────────────────────────────────────────────────────
 
 const FORMAT_COLORS: Record<string, string> = {
-  reel: '#e8f4ec', carousel: '#e8eef8', story: '#f8f0e8', static: '#f4f0f8',
+  reel: 'var(--badge-reel)', carousel: 'var(--badge-carousel)', story: 'var(--badge-story)', static: 'var(--badge-static)',
 }
 const FORMAT_TEXT: Record<string, string> = {
-  reel: '#3d7a52', carousel: '#2d5a9e', story: '#9e6a2d', static: '#6a3d9e',
+  reel: 'var(--accent)', carousel: 'var(--accent)', story: 'var(--accent)', static: 'var(--accent)',
 }
 const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const DAY_FULL = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
@@ -240,7 +240,7 @@ export default function CalendarPage() {
           <div className="flex items-center gap-2">
             <span className="text-sm font-semibold" style={{ color: 'var(--foreground)' }}>Posting framework</span>
             {!frameworkExpanded && hasCalendar && (
-              <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: 'var(--cream-200,#f4efe6)', color: 'var(--muted)' }}>
+              <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: 'var(--cream-200)', color: 'var(--muted)' }}>
                 {framework.posts_per_week}x/week · {framework.posting_days.map(d => DAY_NAMES[d]).join(', ')}
               </span>
             )}
@@ -252,11 +252,11 @@ export default function CalendarPage() {
           <div className="mt-5 space-y-5">
             {/* AI reasoning */}
             {frameworkLoading ? (
-              <div className="p-4 rounded-xl text-sm" style={{ background: 'var(--cream-200,#f4efe6)' }}>
+              <div className="p-4 rounded-xl text-sm" style={{ background: 'var(--cream-200)' }}>
                 <span className="streaming-cursor" style={{ color: 'var(--muted)' }}>Analysing your brand and this month</span>
               </div>
             ) : reasoning ? (
-              <div className="p-4 rounded-xl" style={{ background: 'var(--cream-200,#f4efe6)' }}>
+              <div className="p-4 rounded-xl" style={{ background: 'var(--cream-200)' }}>
                 <p className="text-xs font-semibold uppercase tracking-widest mb-2" style={{ color: 'var(--muted)' }}>AI recommendation</p>
                 <p className="text-sm leading-relaxed" style={{ color: 'var(--foreground)' }}>{reasoning}</p>
               </div>
@@ -379,11 +379,11 @@ export default function CalendarPage() {
                   className="rounded-xl p-2.5 relative group min-h-[100px] transition-all"
                   style={{
                     background: hasPending
-                      ? '#fef3e2'
+                      ? 'var(--pending-bg)'
                       : dayData
                         ? FORMAT_COLORS[dayData.format]
                         : isPostingDay
-                          ? 'var(--cream-200,#f4efe6)'
+                          ? 'var(--cream-200)'
                           : 'var(--background)',
                     border: `1px solid ${hasPending ? '#f5c76a' : 'var(--border)'}`,
                     opacity: isRegenerating ? 0.5 : 1,

@@ -225,7 +225,7 @@ export default function CaptionsPage() {
                       <span
                         key={tag}
                         className="text-xs px-2 py-0.5 rounded-full"
-                        style={{ background: 'var(--cream-200,#f4efe6)', color: 'var(--stone-600,#655a4d)' }}
+                        style={{ background: 'var(--cream-200)', color: 'var(--stone-600)' }}
                       >
                         {tag}
                       </span>

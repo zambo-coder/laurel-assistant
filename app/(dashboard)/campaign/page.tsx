@@ -29,10 +29,10 @@ interface CampaignPlan {
 }
 
 const FORMAT_BADGE: Record<string, string> = {
-  reel: '#e8f4ec',
-  carousel: '#e8eef8',
-  story: '#f8f0e8',
-  static: '#f4f0f8',
+  reel: 'var(--badge-reel)',
+  carousel: 'var(--badge-carousel)',
+  story: 'var(--badge-story)',
+  static: 'var(--badge-static)',
 }
 
 export default function CampaignPage() {
@@ -198,7 +198,7 @@ export default function CampaignPage() {
                 <div
                   key={d.day}
                   className="flex gap-4 p-4 rounded-xl"
-                  style={{ background: FORMAT_BADGE[d.format.toLowerCase()] || 'var(--cream-200,#f4efe6)', border: '1px solid var(--border)' }}
+                  style={{ background: FORMAT_BADGE[d.format.toLowerCase()] || 'var(--cream-200)', border: '1px solid var(--border)' }}
                 >
                   <div className="shrink-0 w-8 text-center">
                     <div className="text-xs font-semibold" style={{ color: 'var(--muted)' }}>Day</div>

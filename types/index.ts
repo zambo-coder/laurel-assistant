@@ -10,6 +10,8 @@ export interface BrandProfile {
   instagram_handle: string
   languages: string[]
   website_url: string
+  etsy_url: string
+  dashboard_widgets?: DashboardWidget[]
   created_at: string
   updated_at: string
 }
@@ -132,3 +134,42 @@ export interface ClientInquiry {
   flags: string[]
   created_at: string
 }
+
+export interface InspirationRef {
+  id: string
+  user_id: string
+  name: string
+  url?: string
+  platform: 'instagram' | 'website' | 'etsy' | 'pinterest' | 'other'
+  aspect_tags: string[]
+  notes: string
+  created_at: string
+}
+
+export interface PresenceAnalysis {
+  id: string
+  user_id: string
+  url: string
+  platform: string
+  analysis: {
+    completeness: { score: number; notes: string }
+    customer_impression: string
+    vs_references: string
+    gaps: string[]
+    technical?: { https: boolean; score_note: string }
+  } | null
+  analyzed_at: string
+}
+
+export interface OpportunityItem {
+  title: string
+  category: 'social' | 'commercial' | 'brand' | 'technical'
+  impact: 'high' | 'medium' | 'low'
+  effort: 'low' | 'medium' | 'high'
+  description: string
+  next_step: string
+}
+
+export type DashboardWidget =
+  | 'chat' | 'quick_actions' | 'top_opportunities'
+  | 'recent_captions' | 'website_card' | 'upcoming_posts'

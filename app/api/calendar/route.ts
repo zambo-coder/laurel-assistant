@@ -3,7 +3,7 @@ import { anthropic, MODEL } from '@/lib/anthropic'
 import { buildBrandSystemPrompt } from '@/lib/brand-context'
 import { streamToResponse } from '@/lib/stream'
 import { NextRequest } from 'next/server'
-import { CalendarDay, CalendarFramework } from '@/types'
+import { CalendarDay, CalendarFramework, InspirationRef } from '@/types'
 
 export async function GET(req: NextRequest) {
   const supabase = await createClient()
@@ -33,7 +33,10 @@ export async function POST(req: NextRequest) {
     framework: CalendarFramework
   }
 
-  const { data: brand } = await supabase.from('brand_profile').select('*').single()
+  const [{ data: brand }, { data: refs }] = await Promise.all([
+    supabase.from('brand_profile').select('*').single(),
+    supabase.from('inspiration_refs').select('*').order('created_at', { ascending: false }),
+  ])
   if (!brand) return new Response('Brand profile not found', { status: 404 })
 
   // Save framework to brand profile for reuse next month
@@ -53,7 +56,7 @@ export async function POST(req: NextRequest) {
     if (framework.posting_days.includes(dow)) postingCalendarDays.push(d)
   }
 
-  const systemPrompt = `${buildBrandSystemPrompt(brand)}
+  const systemPrompt = `${buildBrandSystemPrompt(brand, refs as InspirationRef[])}
 
 Generate an Instagram content calendar for ${month_year}.
 

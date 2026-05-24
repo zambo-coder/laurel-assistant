@@ -3,6 +3,7 @@ import { anthropic, MODEL } from '@/lib/anthropic'
 import { buildBrandSystemPrompt } from '@/lib/brand-context'
 import { streamToResponse } from '@/lib/stream'
 import { NextRequest } from 'next/server'
+import { InspirationRef } from '@/types'
 
 export async function POST(req: NextRequest) {
   const supabase = await createClient()
@@ -14,10 +15,11 @@ export async function POST(req: NextRequest) {
   const { data: brand } = await supabase.from('brand_profile').select('*').single()
   if (!brand) return new Response('Brand profile not found', { status: 404 })
 
-  const [{ data: recentCaptions }, { data: recentInquiries }, { data: timeLogs }] = await Promise.all([
+  const [{ data: recentCaptions }, { data: recentInquiries }, { data: timeLogs }, { data: refs }] = await Promise.all([
     supabase.from('caption_history').select('prompt').order('created_at', { ascending: false }).limit(5),
     supabase.from('client_inquiries').select('inquiry').order('created_at', { ascending: false }).limit(5),
     supabase.from('time_logs').select('activity_type, hours_spent').order('log_date', { ascending: false }).limit(10),
+    supabase.from('inspiration_refs').select('*').order('created_at', { ascending: false }),
   ])
 
   const contextBlocks: string[] = []
@@ -33,7 +35,7 @@ export async function POST(req: NextRequest) {
     contextBlocks.push(`Recent time tracked: ${Object.entries(byActivity).map(([k, v]) => `${k}: ${v}h`).join(', ')}`)
   }
 
-  const systemPrompt = `${buildBrandSystemPrompt(brand)}
+  const systemPrompt = `${buildBrandSystemPrompt(brand, refs as InspirationRef[])}
 
 CURRENT CONTEXT:
 ${contextBlocks.length ? contextBlocks.join('\n') : 'No activity data yet.'}

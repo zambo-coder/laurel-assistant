@@ -1,9 +1,9 @@
-import { BrandProfile } from '@/types'
+import { BrandProfile, InspirationRef } from '@/types'
 
-export function buildBrandSystemPrompt(brand: BrandProfile): string {
+export function buildBrandSystemPrompt(brand: BrandProfile, refs?: InspirationRef[]): string {
   const languageList = brand.languages?.join(', ') || 'Spanish, English, Danish'
 
-  return `You are a creative business assistant for ${brand.business_name}, a boutique wedding invitation design studio.
+  let prompt = `You are a creative business assistant for ${brand.business_name}, a boutique wedding invitation design studio.
 
 BRAND IDENTITY:
 - Business: ${brand.business_name}
@@ -25,4 +25,16 @@ VOICE & TONE GUIDELINES:
 - When writing in English, blend warmth with Nordic elegance
 
 Always generate output that feels authentically like ${brand.business_name}, not like a generic AI assistant.`
+
+  if (refs && refs.length > 0) {
+    const refLines = refs.map(r => {
+      const aspects = r.aspect_tags.length > 0 ? r.aspect_tags.join(', ') : 'general style'
+      const note = r.notes ? ` Notes: ${r.notes}` : ''
+      const url = r.url ? ` (${r.url})` : ''
+      return `- ${r.name}${url} [${r.platform}] — admired for: ${aspects}.${note}`
+    }).join('\n')
+    prompt += `\n\nINSPIRATION REFERENCES (accounts/pages she admires — let these inform style, tone, and ideas):\n${refLines}`
+  }
+
+  return prompt
 }

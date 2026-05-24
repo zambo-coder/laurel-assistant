@@ -16,6 +16,7 @@ const nav = [
       { href: '/captions', icon: '✦', label: 'Captions' },
       { href: '/calendar', icon: '◻', label: 'Content Calendar' },
       { href: '/campaign', icon: '◇', label: 'Campaigns' },
+      { href: '/inspiration', icon: '✶', label: 'Inspiration' },
     ],
   },
   {
@@ -24,11 +25,13 @@ const nav = [
       { href: '/inquiries', icon: '✉', label: 'Client Inquiries' },
       { href: '/website-copy', icon: '◑', label: 'Website Copy' },
       { href: '/assets', icon: '⊞', label: 'Asset Library' },
+      { href: '/presence', icon: '◉', label: 'My Presence' },
     ],
   },
   {
     label: 'Strategy',
     items: [
+      { href: '/opportunities', icon: '◆', label: 'Opportunities' },
       { href: '/roi', icon: '◎', label: 'ROI Tracker' },
       { href: '/strategy', icon: '◈', label: 'Strategy Advisor' },
       { href: '/settings', icon: '⊙', label: 'Settings' },

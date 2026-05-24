@@ -3,6 +3,7 @@ import { anthropic, MODEL } from '@/lib/anthropic'
 import { buildBrandSystemPrompt } from '@/lib/brand-context'
 import { streamToResponse } from '@/lib/stream'
 import { NextRequest } from 'next/server'
+import { InspirationRef } from '@/types'
 
 export async function POST(req: NextRequest) {
   const supabase = await createClient()
@@ -12,10 +13,13 @@ export async function POST(req: NextRequest) {
   const { prompt } = await req.json()
   if (!prompt?.trim()) return new Response('Prompt required', { status: 400 })
 
-  const { data: brand } = await supabase.from('brand_profile').select('*').single()
+  const [{ data: brand }, { data: refs }] = await Promise.all([
+    supabase.from('brand_profile').select('*').single(),
+    supabase.from('inspiration_refs').select('*').order('created_at', { ascending: false }),
+  ])
   if (!brand) return new Response('Brand profile not found', { status: 404 })
 
-  const systemPrompt = `${buildBrandSystemPrompt(brand)}
+  const systemPrompt = `${buildBrandSystemPrompt(brand, refs as InspirationRef[])}
 
 You are generating Instagram captions. Output EXACTLY 5 captions following this format — no extra text before or after:
 

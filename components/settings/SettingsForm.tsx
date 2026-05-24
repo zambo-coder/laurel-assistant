@@ -21,6 +21,7 @@ export default function SettingsForm({ initialData }: { initialData: BrandProfil
     business_goals: initialData?.business_goals ?? '',
     instagram_handle: initialData?.instagram_handle ?? '',
     website_url: initialData?.website_url ?? '',
+    etsy_url: initialData?.etsy_url ?? '',
     languages: initialData?.languages ?? ['Spanish', 'English', 'Danish'],
   })
 
@@ -79,6 +80,7 @@ export default function SettingsForm({ initialData }: { initialData: BrandProfil
             </div>
           </div>
           <Input label="Website URL" value={form.website_url} onChange={(e) => update('website_url', e.target.value)} placeholder="https://yourstudio.squarespace.com" />
+          <Input label="Etsy shop URL" value={form.etsy_url} onChange={(e) => update('etsy_url', e.target.value)} placeholder="https://www.etsy.com/shop/yourstudio" />
           <div>
             <label className="block text-sm font-medium mb-2" style={{ color: 'var(--foreground)' }}>Working languages</label>
             <div className="flex gap-2">

@@ -11,6 +11,7 @@ export interface BrandProfile {
   languages: string[]
   website_url: string
   etsy_url: string
+  logo_url: string
   dashboard_widgets?: DashboardWidget[]
   created_at: string
   updated_at: string

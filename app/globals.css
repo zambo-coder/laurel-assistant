@@ -38,6 +38,17 @@
   --border: #e8dfd0;
   --muted: #978b7c;
   --accent: #c4a06a;
+  --sidebar-active: #f4efe6;
+}
+
+.dark {
+  --background: #1c1812;
+  --foreground: #f4efe6;
+  --surface: #241f18;
+  --border: #3a3028;
+  --muted: #8a7d6e;
+  --accent: #c4a06a;
+  --sidebar-active: #2e2820;
 }
 
 body {

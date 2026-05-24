@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { Geist, Geist_Mono } from 'next/font/google'
 import { Toaster } from 'react-hot-toast'
+import ThemeProvider from '@/components/ThemeProvider'
 import './globals.css'
 
 const geistSans = Geist({
@@ -14,7 +15,7 @@ const geistMono = Geist_Mono({
 })
 
 export const metadata: Metadata = {
-  title: 'Studio Co-pilot',
+  title: 'Studio Assistant',
   description: 'Your personal business assistant',
 }
 
@@ -26,6 +27,7 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${geistSans.variable} ${geistMono.variable} h-full`}>
       <body className="h-full bg-[--background] text-[--foreground]">
+        <ThemeProvider />
         {children}
         <Toaster
           position="bottom-right"

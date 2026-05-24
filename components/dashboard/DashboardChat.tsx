@@ -3,6 +3,20 @@
 import { useState, useRef, useEffect } from 'react'
 import { BrandProfile } from '@/types'
 import Button from '@/components/ui/Button'
+import ReactMarkdown from 'react-markdown'
+import type { Components } from 'react-markdown'
+
+const mdComponents: Components = {
+  p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+  strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
+  em: ({ children }) => <em className="italic">{children}</em>,
+  ul: ({ children }) => <ul className="list-disc pl-4 mb-2 space-y-0.5">{children}</ul>,
+  ol: ({ children }) => <ol className="list-decimal pl-4 mb-2 space-y-0.5">{children}</ol>,
+  li: ({ children }) => <li className="leading-relaxed">{children}</li>,
+  code: ({ children }) => <code className="px-1 py-0.5 rounded text-xs font-mono" style={{ background: 'var(--border)' }}>{children}</code>,
+  h3: ({ children }) => <h3 className="font-semibold mb-1 mt-2">{children}</h3>,
+  h2: ({ children }) => <h2 className="font-semibold mb-1 mt-2">{children}</h2>,
+}
 
 interface Message {
   role: 'user' | 'assistant'
@@ -109,14 +123,18 @@ export default function DashboardChat({ brand }: { brand: BrandProfile | null })
           messages.map((msg, i) => (
             <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
               <div
-                className="max-w-[85%] px-3.5 py-2.5 rounded-xl text-sm leading-relaxed whitespace-pre-wrap"
+                className="max-w-[85%] px-3.5 py-2.5 rounded-xl text-sm leading-relaxed"
                 style={
                   msg.role === 'user'
                     ? { background: 'var(--foreground)', color: 'var(--background)' }
                     : { background: 'var(--cream-200)', color: 'var(--foreground)' }
                 }
               >
-                {msg.content}
+                {msg.role === 'assistant' ? (
+                  <ReactMarkdown components={mdComponents}>{msg.content}</ReactMarkdown>
+                ) : (
+                  <span className="whitespace-pre-wrap">{msg.content}</span>
+                )}
                 {msg.role === 'assistant' && streaming && i === messages.length - 1 && msg.content === '' && (
                   <span className="inline-flex gap-1">
                     <span className="w-1 h-1 rounded-full bg-current animate-bounce" style={{ animationDelay: '0ms' }} />

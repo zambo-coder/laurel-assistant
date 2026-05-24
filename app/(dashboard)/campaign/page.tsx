@@ -159,8 +159,8 @@ export default function CampaignPage() {
               style={{ background: includeBudget ? 'var(--foreground)' : 'var(--border)' }}
             >
               <div
-                className="absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all"
-                style={{ left: includeBudget ? '18px' : '2px' }}
+                className="absolute top-0.5 w-4 h-4 rounded-full transition-all"
+                style={{ background: 'var(--surface)', left: includeBudget ? '18px' : '2px' }}
               />
             </div>
             <span className="text-sm" style={{ color: 'var(--foreground)' }}>Include budget tips</span>

@@ -9,7 +9,7 @@ export default function Card({ children, className = '', padding = 'md' }: CardP
   return (
     <div
       className={`rounded-2xl ${paddings[padding]} ${className}`}
-      style={{ background: '#ffffff', border: '1px solid var(--border)' }}
+      style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}
     >
       {children}
     </div>

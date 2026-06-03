@@ -143,7 +143,10 @@ export default function CalendarPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'save_all', month_year: monthYear, days: finalDays, framework }),
       })
-      if (!res.ok) throw new Error()
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}))
+        throw new Error(errBody.error ?? `Save failed (${res.status})`)
+      }
       setSavedDays(finalDays)
       setDays(finalDays)
       setIsProposal(false)
@@ -675,14 +678,25 @@ export default function CalendarPage() {
                           <span className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin inline-block" style={{ color: 'var(--muted)' }} />
                         </div>
                       ) : isProposalCell ? (
-                        <button
-                          onClick={e => { e.stopPropagation(); removeDayFromProposal(dayNum) }}
-                          className="absolute bottom-1.5 right-1.5 opacity-0 group-hover:opacity-100 text-[10px] p-0.5 rounded transition-opacity"
-                          style={{ color: 'var(--muted)' }}
-                          title="Remove from proposal"
-                        >
-                          ×
-                        </button>
+                        <div className="absolute bottom-1.5 right-1.5 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button
+                            onClick={e => { e.stopPropagation(); proposeRegenerate(dayNum) }}
+                            disabled={generating}
+                            className="text-xs p-0.5 rounded"
+                            style={{ color: 'var(--muted)' }}
+                            title="Suggest a new idea for this day"
+                          >
+                            ↺
+                          </button>
+                          <button
+                            onClick={e => { e.stopPropagation(); removeDayFromProposal(dayNum) }}
+                            className="text-[10px] p-0.5 rounded"
+                            style={{ color: 'var(--muted)' }}
+                            title="Remove from proposal"
+                          >
+                            ×
+                          </button>
+                        </div>
                       ) : !isProposal ? (
                         <button
                           onClick={e => { e.stopPropagation(); proposeRegenerate(dayNum) }}

@@ -17,6 +17,7 @@ export async function GET(req: NextRequest) {
   const { data } = await supabase
     .from('content_calendar')
     .select('*')
+    .eq('user_id', user.id)
     .eq('month_year', month_year)
     .single()
 
@@ -106,14 +107,36 @@ export async function PATCH(req: NextRequest) {
   // action: 'save_all' — save a full set of days (proposal → confirmed)
   if (body.action === 'save_all') {
     const { month_year, days, framework } = body as { month_year: string; days: CalendarDay[]; framework?: CalendarFramework }
-    const { error } = await supabase.from('content_calendar').upsert({
-      user_id: user.id,
-      month_year,
+
+    const { data: existing } = await supabase
+      .from('content_calendar')
+      .select('id')
+      .eq('user_id', user.id)
+      .eq('month_year', month_year)
+      .maybeSingle()
+
+    const payload = {
       days,
       ...(framework ? { framework } : {}),
       updated_at: new Date().toISOString(),
-    }, { onConflict: 'user_id,month_year' })
-    if (error) return Response.json({ error: error.message }, { status: 500 })
+    }
+
+    let saveError
+    if (existing) {
+      const { error } = await supabase
+        .from('content_calendar')
+        .update(payload)
+        .eq('user_id', user.id)
+        .eq('month_year', month_year)
+      saveError = error
+    } else {
+      const { error } = await supabase
+        .from('content_calendar')
+        .insert({ user_id: user.id, month_year, ...payload })
+      saveError = error
+    }
+
+    if (saveError) return Response.json({ error: saveError.message }, { status: 500 })
     return new Response(null, { status: 204 })
   }
 

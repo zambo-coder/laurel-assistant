@@ -152,8 +152,8 @@ export default function CalendarPage() {
       setIsProposal(false)
       setShowTasksOffer(finalDays.length > 0)
       toast.success(`Calendar saved — ${finalDays.length} post${finalDays.length !== 1 ? 's' : ''}`)
-    } catch {
-      toast.error('Could not save calendar')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not save calendar')
     } finally {
       setSaving(false)
     }
@@ -610,23 +610,34 @@ export default function CalendarPage() {
                     </div>
 
                     {isProposalCell ? (
-                      <input
-                        type="checkbox"
-                        checked={isChecked}
-                        onChange={e => {
-                          e.stopPropagation()
-                          setCheckedDays(prev => {
-                            const n = new Set(prev)
-                            if (e.target.checked) n.add(dayNum)
-                            else n.delete(dayNum)
-                            return n
-                          })
-                        }}
-                        onClick={e => e.stopPropagation()}
-                        className="shrink-0 mt-0.5 cursor-pointer"
-                        style={{ accentColor: 'var(--foreground)', width: '13px', height: '13px' }}
-                        title={isChecked ? 'Will be saved' : 'Will not be saved'}
-                      />
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button
+                          onClick={e => { e.stopPropagation(); proposeRegenerate(dayNum) }}
+                          disabled={generating || isRegenerating}
+                          className="text-xs leading-none p-0.5 rounded transition-opacity hover:opacity-60"
+                          style={{ color: 'var(--muted)' }}
+                          title="Regenerate this day"
+                        >
+                          ↺
+                        </button>
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={e => {
+                            e.stopPropagation()
+                            setCheckedDays(prev => {
+                              const n = new Set(prev)
+                              if (e.target.checked) n.add(dayNum)
+                              else n.delete(dayNum)
+                              return n
+                            })
+                          }}
+                          onClick={e => e.stopPropagation()}
+                          className="shrink-0 mt-0.5 cursor-pointer"
+                          style={{ accentColor: 'var(--foreground)', width: '13px', height: '13px' }}
+                          title={isChecked ? 'Will be saved' : 'Will not be saved'}
+                        />
+                      </div>
                     ) : isKeptSaved ? (
                       <span className="text-[9px] px-1.5 py-0.5 rounded-full shrink-0" style={{ background: 'var(--border)', color: 'var(--muted)' }}>
                         saved
@@ -678,25 +689,14 @@ export default function CalendarPage() {
                           <span className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin inline-block" style={{ color: 'var(--muted)' }} />
                         </div>
                       ) : isProposalCell ? (
-                        <div className="absolute bottom-1.5 right-1.5 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button
-                            onClick={e => { e.stopPropagation(); proposeRegenerate(dayNum) }}
-                            disabled={generating}
-                            className="text-xs p-0.5 rounded"
-                            style={{ color: 'var(--muted)' }}
-                            title="Suggest a new idea for this day"
-                          >
-                            ↺
-                          </button>
-                          <button
-                            onClick={e => { e.stopPropagation(); removeDayFromProposal(dayNum) }}
-                            className="text-[10px] p-0.5 rounded"
-                            style={{ color: 'var(--muted)' }}
-                            title="Remove from proposal"
-                          >
-                            ×
-                          </button>
-                        </div>
+                        <button
+                          onClick={e => { e.stopPropagation(); removeDayFromProposal(dayNum) }}
+                          className="absolute bottom-1.5 right-1.5 opacity-0 group-hover:opacity-100 text-[10px] p-0.5 rounded transition-opacity"
+                          style={{ color: 'var(--muted)' }}
+                          title="Remove from proposal"
+                        >
+                          ×
+                        </button>
                       ) : !isProposal ? (
                         <button
                           onClick={e => { e.stopPropagation(); proposeRegenerate(dayNum) }}

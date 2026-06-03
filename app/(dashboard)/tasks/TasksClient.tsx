@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useEffect, useMemo, ReactNode } from 'react'
+import React, { useState, useRef, useEffect, useMemo, ReactNode } from 'react'
 import { Task, Project, FocusArea, Goal } from '@/types'
 import Button from '@/components/ui/Button'
 import PageHeader from '@/components/ui/PageHeader'
@@ -508,7 +508,7 @@ export default function TasksClient({
           </thead>
           <tbody>
             {groups.map(group => (
-              <>
+              <React.Fragment key={group.id}>
                 {group.label && (
                   <tr key={`hdr-${group.id}`} style={{ background: 'var(--cream-200)' }}>
                     <td colSpan={colCount} className="px-3 py-1.5">
@@ -547,7 +547,7 @@ export default function TasksClient({
                     onDelete={() => deleteTask(task.id)}
                   />
                 ))}
-              </>
+              </React.Fragment>
             ))}
           </tbody>
         </table>

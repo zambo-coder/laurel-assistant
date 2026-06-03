@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect, ReactNode } from 'react'
-import { Task, Project } from '@/types'
+import { Task, Project, FocusArea } from '@/types'
 import Button from '@/components/ui/Button'
 import PageHeader from '@/components/ui/PageHeader'
 import toast from 'react-hot-toast'
@@ -42,13 +42,46 @@ interface NewTaskForm {
 }
 const DEFAULT_FORM: NewTaskForm = { title: '', description: '', category: 'general', priority: 'medium', due_date: '', batch_group: '' }
 
-export default function TasksClient({ initialTasks, initialProjects, initialCategories }: {
+// Topological sort within a same-date group so chained tasks appear in execution order
+function topoSortGroup(group: Task[]): Task[] {
+  const ids = new Set(group.map(t => t.id))
+  const visited = new Set<string>()
+  const result: Task[] = []
+  function visit(id: string) {
+    if (visited.has(id)) return
+    visited.add(id)
+    const task = group.find(t => t.id === id)!
+    for (const dep of (task.depends_on ?? []).filter(d => ids.has(d))) visit(dep)
+    result.push(task)
+  }
+  for (const t of group) visit(t.id)
+  return result
+}
+
+function sortWithTopoSameDate(tasks: Task[]): Task[] {
+  const groups = new Map<string, Task[]>()
+  const undated: Task[] = []
+  for (const t of tasks) {
+    if (!t.due_date) { undated.push(t); continue }
+    if (!groups.has(t.due_date)) groups.set(t.due_date, [])
+    groups.get(t.due_date)!.push(t)
+  }
+  const dated: Task[] = []
+  for (const [, g] of [...groups.entries()].sort((a, b) => a[0] < b[0] ? -1 : 1)) {
+    dated.push(...topoSortGroup(g))
+  }
+  return [...undated, ...dated]
+}
+
+export default function TasksClient({ initialTasks, initialProjects, initialCategories, initialFocusAreas }: {
   initialTasks: Task[]
   initialProjects: Project[]
   initialCategories: Category[]
+  initialFocusAreas: Pick<FocusArea, 'id' | 'title' | 'status'>[]
 }) {
   const [tasks, setTasks] = useState<Task[]>(initialTasks)
   const [projects, setProjects] = useState<Project[]>(initialProjects)
+  const [focusAreas] = useState(initialFocusAreas)
   const [categories, setCategories] = useState<Category[]>(
     initialCategories.length > 0 ? initialCategories : DEFAULT_CATEGORIES
   )
@@ -58,6 +91,7 @@ export default function TasksClient({ initialTasks, initialProjects, initialCate
     try { return localStorage.getItem('tasks_hide_completed') === 'true' } catch { return false }
   })
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null)
   const [showAdd, setShowAdd] = useState(false)
   const [newForm, setNewForm] = useState<NewTaskForm>(DEFAULT_FORM)
   const [saving, setSaving] = useState(false)
@@ -101,6 +135,22 @@ export default function TasksClient({ initialTasks, initialProjects, initialCate
     setTasks(prev => prev.filter(t => t.id !== id))
     if (selectedId === id) setSelectedId(null)
     await fetch(`/api/tasks/${id}`, { method: 'DELETE' })
+  }
+
+  async function deleteProject(id: string) {
+    setProjects(prev => prev.filter(p => p.id !== id))
+    setTasks(prev => prev.map(t => t.project_id === id ? { ...t, project_id: undefined } : t))
+    if (selectedProjectId === id) setSelectedProjectId(null)
+    await fetch(`/api/projects/${id}`, { method: 'DELETE' })
+  }
+
+  async function patchProject(id: string, updates: Partial<Project>) {
+    setProjects(prev => prev.map(p => p.id === id ? { ...p, ...updates } : p))
+    await fetch(`/api/projects/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updates),
+    })
   }
 
   async function patch(id: string, updates: Partial<Task>) {
@@ -199,7 +249,7 @@ export default function TasksClient({ initialTasks, initialProjects, initialCate
 
   function renderAllView() {
     const unplanned = tasks.filter(t => !t.due_date)
-    const planned = tasks.filter(t => !!t.due_date).sort((a, b) => a.due_date! < b.due_date! ? -1 : 1)
+    const planned = sortWithTopoSameDate(tasks.filter(t => !!t.due_date))
 
     const unplannedContent = renderTaskSection(unplanned, true)
     const plannedContent = renderTaskSection(planned, true)
@@ -238,7 +288,7 @@ export default function TasksClient({ initialTasks, initialProjects, initialCate
 
   function renderTodayView() {
     const overdue = tasks.filter(t => t.due_date && t.due_date < TODAY && t.status !== 'done')
-    const todayAll = tasks.filter(t => t.due_date === TODAY)
+    const todayAll = topoSortGroup(tasks.filter(t => t.due_date === TODAY))
 
     const filtered = (arr: Task[]) => statusFilter === 'all' ? arr : arr.filter(t => t.status === statusFilter)
     const overdueFiltered = filtered(overdue)
@@ -288,7 +338,13 @@ export default function TasksClient({ initialTasks, initialProjects, initialCate
       <div className="space-y-5">
         {projectGroups.map(({ project, items }) => (
           <div key={project.id}>
-            <div className="flex items-center gap-2 px-1 mb-1.5">
+            <button
+              className="w-full flex items-center gap-2 px-1 mb-1.5 text-left hover:opacity-80 transition-opacity"
+              onClick={() => {
+                setSelectedProjectId(selectedProjectId === project.id ? null : project.id)
+                setSelectedId(null)
+              }}
+            >
               <span className="text-[10px] px-2 py-0.5 rounded-full font-medium capitalize"
                 style={{ background: TYPE_COLORS[project.type] + '20', color: TYPE_COLORS[project.type] }}>
                 {project.type}
@@ -296,8 +352,9 @@ export default function TasksClient({ initialTasks, initialProjects, initialCate
               <span className="text-xs font-semibold" style={{ color: 'var(--foreground)' }}>{project.title}</span>
               <span className="text-[10px]" style={{ color: 'var(--muted)' }}>{items.length} task{items.length !== 1 ? 's' : ''}</span>
               <div className="flex-1 h-px" style={{ background: 'var(--border)' }} />
-            </div>
-            {renderTaskSection(items, false)}
+              <span className="text-[10px]" style={{ color: 'var(--muted)' }}>⋯</span>
+            </button>
+            {renderTaskSection(topoSortGroup(items), false)}
           </div>
         ))}
         {unassigned.length > 0 && (
@@ -420,23 +477,35 @@ export default function TasksClient({ initialTasks, initialProjects, initialCate
       </div>
 
       {/* Detail panel */}
-      {selected && (
+      {(selected || selectedProjectId) && (
         <div className="w-80 shrink-0">
-          <TaskDetail
-            task={selected}
-            allTasks={tasks}
-            allProjects={projects}
-            categories={categories}
-            catColor={catColor}
-            blockedBySelected={blockedBySelected}
-            onPatch={patch}
-            onClose={() => setSelectedId(null)}
-            onDelete={deleteTask}
-            onAddDep={addDependency}
-            onRemoveDep={removeDependency}
-            onAddProject={addProject}
-            onEditCategories={() => setShowCategoryModal(true)}
-          />
+          {selected ? (
+            <TaskDetail
+              task={selected}
+              allTasks={tasks}
+              allProjects={projects}
+              allFocusAreas={focusAreas}
+              categories={categories}
+              catColor={catColor}
+              blockedBySelected={blockedBySelected}
+              onPatch={patch}
+              onClose={() => setSelectedId(null)}
+              onDelete={deleteTask}
+              onAddDep={addDependency}
+              onRemoveDep={removeDependency}
+              onAddProject={addProject}
+              onEditCategories={() => setShowCategoryModal(true)}
+            />
+          ) : selectedProjectId ? (
+            <ProjectDetail
+              project={projects.find(p => p.id === selectedProjectId)!}
+              allFocusAreas={focusAreas}
+              taskCount={tasks.filter(t => t.project_id === selectedProjectId).length}
+              onPatch={patchProject}
+              onDelete={deleteProject}
+              onClose={() => setSelectedProjectId(null)}
+            />
+          ) : null}
         </div>
       )}
 
@@ -558,6 +627,7 @@ interface DetailProps {
   task: Task
   allTasks: Task[]
   allProjects: Project[]
+  allFocusAreas: Pick<FocusArea, 'id' | 'title' | 'status'>[]
   categories: { name: string; color: string }[]
   catColor: (name: string) => string
   blockedBySelected: Task[]
@@ -570,7 +640,7 @@ interface DetailProps {
   onEditCategories: () => void
 }
 
-function TaskDetail({ task, allTasks, allProjects, categories, catColor, blockedBySelected, onPatch, onClose, onDelete, onAddDep, onRemoveDep, onAddProject, onEditCategories }: DetailProps) {
+function TaskDetail({ task, allTasks, allProjects, allFocusAreas, categories, catColor, blockedBySelected, onPatch, onClose, onDelete, onAddDep, onRemoveDep, onAddProject, onEditCategories }: DetailProps) {
   const [addDepSearch, setAddDepSearch] = useState('')
   const [addBlocksSearch, setAddBlocksSearch] = useState('')
 
@@ -673,6 +743,14 @@ function TaskDetail({ task, allTasks, allProjects, categories, catColor, blocked
             allProjects={allProjects}
             onSet={projectId => onPatch(task.id, { project_id: projectId ?? undefined })}
             onAdd={onAddProject}
+          />
+        </FieldRow>
+
+        <FieldRow label="Focus area">
+          <FocusAreaSelect
+            value={task.focus_area_id ?? null}
+            options={allFocusAreas}
+            onChange={id => onPatch(task.id, { focus_area_id: id ?? undefined })}
           />
         </FieldRow>
 
@@ -1002,6 +1080,130 @@ function FieldRow({ label, children }: { label: ReactNode; children: ReactNode }
     <div>
       <p className="text-[10px] uppercase tracking-wide font-semibold mb-1.5" style={{ color: 'var(--muted)' }}>{label}</p>
       {children}
+    </div>
+  )
+}
+
+// ─── Focus Area Select ─────────────────────────────────────────────────────────
+
+function FocusAreaSelect({ value, options, onChange }: {
+  value: string | null
+  options: Pick<FocusArea, 'id' | 'title' | 'status'>[]
+  onChange: (id: string | null) => void
+}) {
+  const current = options.find(f => f.id === value)
+  return (
+    <select
+      value={value ?? ''}
+      onChange={e => onChange(e.target.value || null)}
+      className="w-full px-2.5 py-1.5 rounded-lg text-xs outline-none"
+      style={{ background: 'var(--background)', border: '1.5px solid var(--border)', color: current ? 'var(--foreground)' : 'var(--muted)' }}
+    >
+      <option value=''>No focus area</option>
+      {options.map(f => (
+        <option key={f.id} value={f.id}>{f.title}</option>
+      ))}
+    </select>
+  )
+}
+
+// ─── Project Detail Panel ──────────────────────────────────────────────────────
+
+function ProjectDetail({ project, allFocusAreas, taskCount, onPatch, onDelete, onClose }: {
+  project: Project
+  allFocusAreas: Pick<FocusArea, 'id' | 'title' | 'status'>[]
+  taskCount: number
+  onPatch: (id: string, updates: Partial<Project>) => void
+  onDelete: (id: string) => void
+  onClose: () => void
+}) {
+  const [titleDraft, setTitleDraft] = useState(project.title)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+
+  return (
+    <div className="sticky top-4 rounded-2xl overflow-hidden" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
+      <div className="flex items-center justify-between px-4 py-3" style={{ borderBottom: '1px solid var(--border)' }}>
+        <p className="text-sm font-medium truncate" style={{ color: 'var(--foreground)' }}>Project</p>
+        <button onClick={onClose} className="text-xl hover:opacity-60 transition-opacity shrink-0 ml-2" style={{ color: 'var(--muted)' }}>×</button>
+      </div>
+
+      <div className="p-4 space-y-4 overflow-y-auto max-h-[calc(100vh-200px)]">
+        <FieldRow label="Title">
+          <input
+            value={titleDraft}
+            onChange={e => setTitleDraft(e.target.value)}
+            onBlur={() => titleDraft.trim() && onPatch(project.id, { title: titleDraft.trim() })}
+            onKeyDown={e => e.key === 'Enter' && titleDraft.trim() && onPatch(project.id, { title: titleDraft.trim() })}
+            className="w-full px-3 py-1.5 rounded-lg text-sm outline-none"
+            style={{ background: 'var(--background)', border: '1.5px solid var(--border)', color: 'var(--foreground)' }}
+            onFocus={e => (e.target.style.borderColor = 'var(--accent)')}
+          />
+        </FieldRow>
+
+        <FieldRow label="Type">
+          <div className="flex gap-1">
+            {(['content', 'client', 'general'] as Project['type'][]).map(t => (
+              <button key={t} onClick={() => onPatch(project.id, { type: t })}
+                className="px-2.5 py-1 rounded-full text-xs font-medium capitalize transition-all"
+                style={{ background: project.type === t ? TYPE_COLORS[t] : 'var(--border)', color: project.type === t ? '#fff' : 'var(--muted)' }}>
+                {t}
+              </button>
+            ))}
+          </div>
+        </FieldRow>
+
+        <FieldRow label="Status">
+          <div className="flex gap-1">
+            {(['active', 'completed', 'archived'] as Project['status'][]).map(s => (
+              <button key={s} onClick={() => onPatch(project.id, { status: s })}
+                className="px-2.5 py-1 rounded-full text-xs font-medium capitalize transition-all"
+                style={{ background: project.status === s ? 'var(--foreground)' : 'var(--border)', color: project.status === s ? 'var(--background)' : 'var(--muted)' }}>
+                {s}
+              </button>
+            ))}
+          </div>
+        </FieldRow>
+
+        <FieldRow label="Focus area">
+          <FocusAreaSelect
+            value={project.focus_area_id ?? null}
+            options={allFocusAreas}
+            onChange={id => onPatch(project.id, { focus_area_id: id ?? undefined })}
+          />
+        </FieldRow>
+
+        <p className="text-xs" style={{ color: 'var(--muted)' }}>{taskCount} task{taskCount !== 1 ? 's' : ''} in this project</p>
+
+        <div className="pt-2" style={{ borderTop: '1px solid var(--border)' }}>
+          {confirmDelete ? (
+            <div className="rounded-xl p-3 space-y-2" style={{ background: '#c07a6a12', border: '1px solid #c07a6a30' }}>
+              <p className="text-xs" style={{ color: '#c07a6a' }}>
+                Delete this project? Tasks will be unlinked but not deleted.
+              </p>
+              <div className="flex gap-2">
+                <button onClick={() => setConfirmDelete(false)}
+                  className="text-xs px-2.5 py-1 rounded-lg"
+                  style={{ background: 'var(--border)', color: 'var(--muted)' }}>
+                  Cancel
+                </button>
+                <button onClick={() => { onDelete(project.id); onClose() }}
+                  className="text-xs px-2.5 py-1 rounded-lg"
+                  style={{ background: '#c07a6a', color: '#fff' }}>
+                  Delete
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              onClick={() => setConfirmDelete(true)}
+              className="w-full text-xs py-2 rounded-lg transition-all hover:opacity-80"
+              style={{ background: '#c07a6a18', color: '#c07a6a', border: '1px solid #c07a6a30' }}
+            >
+              Delete project
+            </button>
+          )}
+        </div>
+      </div>
     </div>
   )
 }

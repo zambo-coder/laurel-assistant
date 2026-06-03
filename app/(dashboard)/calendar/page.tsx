@@ -311,22 +311,27 @@ export default function CalendarPage() {
           const data = await tasksRes.json()
           if (!tasksRes.ok || !data.tasks?.length) continue
 
-          await Promise.all(
-            data.tasks.map((t: { title: string; category: string; priority: string; batch_group: string }) =>
-              fetch('/api/tasks', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  ...t,
-                  month_year: monthYear,
-                  calendar_day: calDay.day,
-                  source: 'calendar',
-                  project_id: projectId,
-                }),
-              })
-            )
-          )
-          totalTasks += data.tasks.length
+          // Create sequentially and chain: each task depends on the previous one
+          let prevId: string | undefined
+          for (const t of data.tasks as { title: string; category: string; priority: string; batch_group: string }[]) {
+            const res = await fetch('/api/tasks', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                ...t,
+                month_year: monthYear,
+                calendar_day: calDay.day,
+                source: 'calendar',
+                project_id: projectId,
+                depends_on: prevId ? [prevId] : [],
+              }),
+            })
+            if (res.ok) {
+              const created = await res.json()
+              prevId = created.id
+              totalTasks++
+            }
+          }
         } catch { /* skip failed days */ }
       }
       toast.success(`${totalTasks} tasks created across ${savedDays.length} posts`)

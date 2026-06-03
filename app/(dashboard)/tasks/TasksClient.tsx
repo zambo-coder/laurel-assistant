@@ -552,6 +552,7 @@ interface RowProps {
 function TaskRow({ task, project, catColor, isSelected, onClick, onCycleStatus, onDelete, editField, setEditField, onPatch }: RowProps) {
   const isEditingTitle = editField?.id === task.id && editField.field === 'title'
   const [titleDraft, setTitleDraft] = useState(task.title)
+  const [confirming, setConfirming] = useState(false)
 
   const statusIcon = task.status === 'done' ? '✓' : task.status === 'in_progress' ? '◐' : '○'
   const statusColor = task.status === 'done' ? '#7a9478' : task.status === 'in_progress' ? '#c4a06a' : 'var(--muted)'
@@ -612,11 +613,32 @@ function TaskRow({ task, project, catColor, isSelected, onClick, onCycleStatus, 
       </div>
 
       <div className="w-2 h-2 rounded-full shrink-0" style={{ background: PRIORITY_COLORS[task.priority] }} title={`Priority: ${task.priority}`} />
-      <button onClick={e => { e.stopPropagation(); onDelete() }}
-        className="opacity-0 group-hover:opacity-100 text-sm hover:opacity-60 transition-opacity shrink-0"
-        style={{ color: 'var(--muted)' }}>
-        ×
-      </button>
+      {confirming ? (
+        <div className="flex items-center gap-1 shrink-0" onClick={e => e.stopPropagation()}>
+          <button
+            onClick={e => { e.stopPropagation(); onDelete() }}
+            className="text-[10px] px-1.5 py-0.5 rounded font-medium"
+            style={{ background: '#c07a6a', color: '#fff' }}
+          >
+            Delete
+          </button>
+          <button
+            onClick={e => { e.stopPropagation(); setConfirming(false) }}
+            className="text-[10px] px-1.5 py-0.5 rounded"
+            style={{ background: 'var(--border)', color: 'var(--muted)' }}
+          >
+            Cancel
+          </button>
+        </div>
+      ) : (
+        <button
+          onClick={e => { e.stopPropagation(); setConfirming(true) }}
+          className="opacity-0 group-hover:opacity-100 text-sm hover:opacity-60 transition-opacity shrink-0"
+          style={{ color: 'var(--muted)' }}
+        >
+          ×
+        </button>
+      )}
     </div>
   )
 }
@@ -643,6 +665,7 @@ interface DetailProps {
 function TaskDetail({ task, allTasks, allProjects, allFocusAreas, categories, catColor, blockedBySelected, onPatch, onClose, onDelete, onAddDep, onRemoveDep, onAddProject, onEditCategories }: DetailProps) {
   const [addDepSearch, setAddDepSearch] = useState('')
   const [addBlocksSearch, setAddBlocksSearch] = useState('')
+  const [confirmDelete, setConfirmDelete] = useState(false)
 
   const blockedBy = (task.depends_on ?? []).map(id => allTasks.find(t => t.id === id)).filter(Boolean) as Task[]
   const currentProject = allProjects.find(p => p.id === task.project_id)
@@ -789,13 +812,31 @@ function TaskDetail({ task, allTasks, allProjects, allFocusAreas, categories, ca
         </div>
 
         <div className="pt-2" style={{ borderTop: '1px solid var(--border)' }}>
-          <button
-            onClick={() => { onDelete(task.id); onClose() }}
-            className="w-full text-xs py-2 rounded-lg transition-all hover:opacity-80"
-            style={{ background: '#c07a6a18', color: '#c07a6a', border: '1px solid #c07a6a30' }}
-          >
-            Delete task
-          </button>
+          {confirmDelete ? (
+            <div className="rounded-xl p-3 space-y-2" style={{ background: '#c07a6a12', border: '1px solid #c07a6a30' }}>
+              <p className="text-xs" style={{ color: '#c07a6a' }}>Delete this task? This cannot be undone.</p>
+              <div className="flex gap-2">
+                <button onClick={() => setConfirmDelete(false)}
+                  className="text-xs px-2.5 py-1 rounded-lg"
+                  style={{ background: 'var(--border)', color: 'var(--muted)' }}>
+                  Cancel
+                </button>
+                <button onClick={() => { onDelete(task.id); onClose() }}
+                  className="text-xs px-2.5 py-1 rounded-lg"
+                  style={{ background: '#c07a6a', color: '#fff' }}>
+                  Delete
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              onClick={() => setConfirmDelete(true)}
+              className="w-full text-xs py-2 rounded-lg transition-all hover:opacity-80"
+              style={{ background: '#c07a6a18', color: '#c07a6a', border: '1px solid #c07a6a30' }}
+            >
+              Delete task
+            </button>
+          )}
         </div>
       </div>
     </div>

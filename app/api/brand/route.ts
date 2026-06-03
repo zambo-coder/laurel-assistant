@@ -17,9 +17,12 @@ export async function PUT(req: NextRequest) {
   if (!user) return new Response('Unauthorized', { status: 401 })
 
   const body = await req.json()
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { id, user_id, created_at, ...fields } = body
   const { error } = await supabase
     .from('brand_profile')
-    .upsert({ ...body, user_id: user.id, updated_at: new Date().toISOString() })
+    .update({ ...fields, updated_at: new Date().toISOString() })
+    .eq('user_id', user.id)
 
   if (error) return Response.json({ error: error.message }, { status: 500 })
   return Response.json({ ok: true })

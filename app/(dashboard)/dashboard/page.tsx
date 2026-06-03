@@ -4,7 +4,10 @@ import DashboardClient from './DashboardClient'
 export default async function DashboardPage() {
   const supabase = await createClient()
 
-  const [{ data: brand }, { data: recentCaptions }, { data: recentInquiries }, { data: opportunities }, { data: calendar }] = await Promise.all([
+  const sevenDaysFromNow = new Date()
+  sevenDaysFromNow.setDate(sevenDaysFromNow.getDate() + 7)
+
+  const [{ data: brand }, { data: recentCaptions }, { data: recentInquiries }, { data: opportunities }, { data: calendar }, { data: tasks }] = await Promise.all([
     supabase.from('brand_profile').select('*').single(),
     supabase.from('caption_history').select('id, prompt, created_at').order('created_at', { ascending: false }).limit(3),
     supabase.from('client_inquiries').select('id, inquiry, created_at').order('created_at', { ascending: false }).limit(3),
@@ -15,6 +18,11 @@ export default async function DashboardPage() {
       .order('month_year', { ascending: true })
       .limit(1)
       .single(),
+    supabase.from('tasks')
+      .select('*')
+      .neq('status', 'done')
+      .order('due_date', { ascending: true, nullsFirst: false })
+      .limit(5),
   ])
 
   return (
@@ -25,6 +33,7 @@ export default async function DashboardPage() {
       topOpportunities={opportunities?.items?.slice(0, 3) ?? []}
       calendarDays={(calendar as { days?: { day: number; theme: string; post_idea: string; format: string }[] } | null)?.days ?? []}
       calendarMonth={(calendar as { month_year?: string } | null)?.month_year ?? ''}
+      tasks={tasks ?? []}
     />
   )
 }

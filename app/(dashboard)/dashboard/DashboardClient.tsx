@@ -3,19 +3,21 @@
 import { useState } from 'react'
 import Card from '@/components/ui/Card'
 import DashboardChat from '@/components/dashboard/DashboardChat'
+import TasksWidget from '@/components/dashboard/TasksWidget'
 import Link from 'next/link'
-import { BrandProfile, DashboardWidget, OpportunityItem } from '@/types'
+import { BrandProfile, DashboardWidget, OpportunityItem, Task } from '@/types'
 
 const ALL_WIDGETS: { id: DashboardWidget; label: string }[] = [
   { id: 'chat', label: 'AI Assistant' },
   { id: 'quick_actions', label: 'Quick Actions' },
   { id: 'top_opportunities', label: 'Top Opportunities' },
+  { id: 'tasks', label: 'Tasks' },
   { id: 'recent_captions', label: 'Recent Captions' },
   { id: 'website_card', label: 'Website' },
   { id: 'upcoming_posts', label: 'Upcoming Posts' },
 ]
 
-const DEFAULT_WIDGETS: DashboardWidget[] = ['chat', 'quick_actions', 'top_opportunities', 'recent_captions', 'website_card']
+const DEFAULT_WIDGETS: DashboardWidget[] = ['chat', 'quick_actions', 'top_opportunities', 'tasks', 'recent_captions', 'website_card']
 
 const IMPACT_COLOR: Record<string, string> = {
   high: '#c07a6a',
@@ -37,6 +39,7 @@ interface Props {
   topOpportunities: OpportunityItem[]
   calendarDays: CalendarDay[]
   calendarMonth: string
+  tasks: Task[]
 }
 
 function getGreeting() {
@@ -47,7 +50,7 @@ function getGreeting() {
 }
 
 export default function DashboardClient({
-  brand, recentCaptions, recentInquiries, topOpportunities, calendarDays, calendarMonth,
+  brand, recentCaptions, recentInquiries, topOpportunities, calendarDays, calendarMonth, tasks,
 }: Props) {
   const savedWidgets = (brand?.dashboard_widgets ?? DEFAULT_WIDGETS) as DashboardWidget[]
   const [activeWidgets, setActiveWidgets] = useState<DashboardWidget[]>(savedWidgets)
@@ -164,7 +167,7 @@ export default function DashboardClient({
         )}
 
         {/* Right column */}
-        {(has('website_card') || has('recent_captions') || has('top_opportunities') || has('upcoming_posts')) && (
+        {(has('website_card') || has('recent_captions') || has('top_opportunities') || has('upcoming_posts') || has('tasks')) && (
           <div className={has('chat') ? 'col-span-2 space-y-4' : 'col-span-5 grid grid-cols-2 gap-4'}>
             {/* Top Opportunities */}
             {has('top_opportunities') && (
@@ -187,6 +190,13 @@ export default function DashboardClient({
                     <Link href="/opportunities" className="underline underline-offset-2">Generate opportunities →</Link>
                   </p>
                 )}
+              </Card>
+            )}
+
+            {/* Tasks */}
+            {has('tasks') && (
+              <Card padding="sm">
+                <TasksWidget tasks={tasks} />
               </Card>
             )}
 

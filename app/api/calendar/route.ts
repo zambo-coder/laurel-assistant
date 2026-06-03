@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { anthropic, MODEL } from '@/lib/anthropic'
+import { logUsage } from '@/lib/usage'
 import { buildBrandSystemPrompt } from '@/lib/brand-context'
 import { streamToResponse } from '@/lib/stream'
 import { NextRequest } from 'next/server'
@@ -38,6 +39,7 @@ export async function POST(req: NextRequest) {
     supabase.from('inspiration_refs').select('*').order('created_at', { ascending: false }),
   ])
   if (!brand) return new Response('Brand profile not found', { status: 404 })
+  const model = brand.ai_text_model || MODEL
 
   // Save framework to brand profile for reuse next month
   void supabase.from('brand_profile').update({
@@ -77,24 +79,14 @@ Rules:
 
   try {
     const stream = anthropic.messages.stream({
-      model: MODEL,
+      model,
       max_tokens: 2000,
       system: systemPrompt,
       messages: [{ role: 'user', content: `Create the content calendar for ${month_year}.` }],
     })
 
     stream.finalMessage().then(msg => {
-      const fullText = msg.content[0].type === 'text' ? msg.content[0].text : ''
-      const days = parseCalendar(fullText)
-      if (days.length > 0) {
-        void supabase.from('content_calendar').upsert({
-          user_id: user.id,
-          month_year,
-          days,
-          framework,
-          updated_at: new Date().toISOString(),
-        })
-      }
+      logUsage(supabase, user.id, 'anthropic', model, 'calendar_generate', msg.usage.input_tokens, msg.usage.output_tokens)
     }).catch(() => {})
 
     return streamToResponse(stream)
@@ -109,19 +101,79 @@ export async function PATCH(req: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return new Response('Unauthorized', { status: 401 })
 
-  const { month_year, day } = await req.json()
+  const body = await req.json()
+
+  // action: 'save_all' — save a full set of days (proposal → confirmed)
+  if (body.action === 'save_all') {
+    const { month_year, days, framework } = body as { month_year: string; days: CalendarDay[]; framework?: CalendarFramework }
+    const { error } = await supabase.from('content_calendar').upsert({
+      user_id: user.id,
+      month_year,
+      days,
+      ...(framework ? { framework } : {}),
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'user_id,month_year' })
+    if (error) return Response.json({ error: error.message }, { status: 500 })
+    return new Response(null, { status: 204 })
+  }
+
+  // action: 'update' — save edits to an existing day (supports moving to a different day)
+  if (body.action === 'update') {
+    const { month_year, day, updates } = body as { month_year: string; day: number; updates: Partial<CalendarDay> }
+
+    const { data: existing, error: fetchErr } = await supabase
+      .from('content_calendar')
+      .select('days')
+      .eq('user_id', user.id)
+      .eq('month_year', month_year)
+      .single()
+
+    if (fetchErr || !existing) return Response.json({ error: 'Calendar not found' }, { status: 404 })
+
+    let days: CalendarDay[] = existing.days ?? []
+    const targetDay = updates.day ?? day
+
+    if (targetDay !== day) {
+      const sourceEntry = days.find(d => d.day === day)
+      days = days.filter(d => d.day !== day && d.day !== targetDay)
+      if (sourceEntry) days.push({ ...sourceEntry, ...updates, day: targetDay })
+    } else {
+      const idx = days.findIndex(d => d.day === day)
+      if (idx >= 0) {
+        days[idx] = { ...days[idx], ...updates }
+      } else {
+        days.push({ day, theme: '', post_idea: '', format: 'static', ...updates })
+      }
+    }
+
+    days.sort((a, b) => a.day - b.day)
+
+    const { error } = await supabase
+      .from('content_calendar')
+      .update({ days, updated_at: new Date().toISOString() })
+      .eq('user_id', user.id)
+      .eq('month_year', month_year)
+
+    if (error) return Response.json({ error: error.message }, { status: 500 })
+    return new Response(null, { status: 204 })
+  }
+
+  // action: 'propose' (default) — return an AI-suggested day without saving
+  const { month_year, day } = body
 
   const { data: brand } = await supabase.from('brand_profile').select('*').single()
   if (!brand) return Response.json({ error: 'Brand profile not found' }, { status: 404 })
+  const proposeModel = brand.ai_text_model || MODEL
 
   try {
     const message = await anthropic.messages.create({
-      model: MODEL,
+      model: proposeModel,
       max_tokens: 200,
       system: `${buildBrandSystemPrompt(brand)}\nOutput exactly one line: DAY_${day}|format|theme|post_idea`,
       messages: [{ role: 'user', content: `Suggest a new post idea for day ${day} of ${month_year}.` }],
     })
 
+    logUsage(supabase, user.id, 'anthropic', proposeModel, 'calendar_suggest', message.usage.input_tokens, message.usage.output_tokens)
     const text = message.content[0].type === 'text' ? message.content[0].text : ''
     const days = parseCalendar(text)
     if (!days[0]) return Response.json({ error: 'Could not parse response' }, { status: 500 })

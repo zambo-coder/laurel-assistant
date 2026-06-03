@@ -5,16 +5,10 @@ import Card from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
 import Textarea from '@/components/ui/Textarea'
+import TagInput from '@/components/ui/TagInput'
 import { InspirationRef } from '@/types'
 
 const PLATFORMS = ['instagram', 'website', 'etsy', 'pinterest', 'other'] as const
-const ASPECT_OPTIONS = [
-  { id: 'design_style', label: 'Design Style' },
-  { id: 'content', label: 'Content Strategy' },
-  { id: 'pricing', label: 'Pricing' },
-  { id: 'branding', label: 'Branding' },
-  { id: 'photography', label: 'Photography' },
-]
 
 const PLATFORM_ICONS: Record<string, string> = {
   instagram: '◎',
@@ -46,14 +40,8 @@ export default function InspirationRefsSection() {
       .finally(() => setLoading(false))
   }, [])
 
-  function toggleTag(id: string) {
-    setForm(p => ({
-      ...p,
-      aspect_tags: p.aspect_tags.includes(id)
-        ? p.aspect_tags.filter(t => t !== id)
-        : [...p.aspect_tags, id],
-    }))
-  }
+  // All existing tags across all refs — offered as suggestions
+  const allTags = [...new Set(refs.flatMap(r => r.aspect_tags))]
 
   async function save() {
     if (!form.name.trim()) return
@@ -128,22 +116,15 @@ export default function InspirationRefsSection() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium mb-2" style={{ color: 'var(--foreground)' }}>What inspires you?</label>
-            <div className="flex gap-2 flex-wrap">
-              {ASPECT_OPTIONS.map(a => (
-                <button
-                  key={a.id}
-                  onClick={() => toggleTag(a.id)}
-                  className="px-3 py-1.5 rounded-full text-xs font-medium transition-all"
-                  style={{
-                    background: form.aspect_tags.includes(a.id) ? 'var(--accent)' : 'var(--border)',
-                    color: form.aspect_tags.includes(a.id) ? '#fff' : 'var(--muted)',
-                  }}
-                >
-                  {a.label}
-                </button>
-              ))}
-            </div>
+            <label className="block text-sm font-medium mb-2" style={{ color: 'var(--foreground)' }}>
+              What inspires you? <span className="font-normal text-xs" style={{ color: 'var(--muted)' }}>— type any tag, Enter to add</span>
+            </label>
+            <TagInput
+              tags={form.aspect_tags}
+              onChange={tags => setForm(p => ({ ...p, aspect_tags: tags }))}
+              suggestions={allTags}
+              placeholder="e.g. photography, pricing, branding…"
+            />
           </div>
 
           <Textarea
@@ -200,18 +181,15 @@ export default function InspirationRefsSection() {
                 </div>
                 {ref.aspect_tags.length > 0 && (
                   <div className="flex gap-1.5 flex-wrap mt-1.5">
-                    {ref.aspect_tags.map(tag => {
-                      const label = ASPECT_OPTIONS.find(a => a.id === tag)?.label ?? tag
-                      return (
-                        <span
-                          key={tag}
-                          className="px-2 py-0.5 rounded-full text-[10px] font-medium"
-                          style={{ background: 'var(--accent)', color: '#fff', opacity: 0.85 }}
-                        >
-                          {label}
-                        </span>
-                      )
-                    })}
+                    {ref.aspect_tags.map(tag => (
+                      <span
+                        key={tag}
+                        className="px-2 py-0.5 rounded-full text-[10px] font-medium"
+                        style={{ background: 'var(--accent)', color: '#fff', opacity: 0.85 }}
+                      >
+                        {tag}
+                      </span>
+                    ))}
                   </div>
                 )}
                 {ref.notes && (

@@ -30,8 +30,18 @@ const STARTERS = [
   'Draft an out-of-office reply',
 ]
 
+interface Conversation {
+  id: string
+  name: string
+  updated_at: string
+}
+
 export default function DashboardChat({ brand }: { brand: BrandProfile | null }) {
   const [messages, setMessages] = useState<Message[]>([])
+  const [conversationId, setConversationId] = useState<string | null>(null)
+  const [convName, setConvName] = useState<string>('')
+  const [conversations, setConversations] = useState<Conversation[]>([])
+  const [loading, setLoading] = useState(true)
   const [input, setInput] = useState('')
   const [streaming, setStreaming] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
@@ -41,23 +51,63 @@ export default function DashboardChat({ brand }: { brand: BrandProfile | null })
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
+  // On mount: load the most recent conversation (or create one)
+  useEffect(() => {
+    async function init() {
+      setLoading(true)
+      try {
+        const res = await fetch('/api/conversations')
+        const raw = await res.json()
+        const convs: Conversation[] = Array.isArray(raw) ? raw : []
+        let id: string
+        let name: string
+
+        if (convs.length > 0) {
+          id = convs[0].id
+          name = convs[0].name
+          setConversations(convs)
+        } else {
+          const newRes = await fetch('/api/conversations', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: 'New conversation' }),
+          })
+          const newConv = await newRes.json()
+          id = newConv.id
+          name = newConv.name
+          setConversations([newConv])
+        }
+
+        setConversationId(id)
+        setConvName(name)
+
+        const msgRes = await fetch(`/api/chat?conversation_id=${id}`)
+        const msgs = await msgRes.json()
+        setMessages(Array.isArray(msgs) ? msgs : [])
+      } catch { /* silent */ }
+      finally { setLoading(false) }
+    }
+    init()
+  }, [])
+
   async function send(text?: string) {
     const content = (text ?? input).trim()
-    if (!content || streaming) return
+    if (!content || streaming || !conversationId) return
 
-    const newMessages: Message[] = [...messages, { role: 'user', content }]
-    setMessages(newMessages)
+    const history = messages.map(m => ({ role: m.role, content: m.content }))
+    const newHistory = [...history, { role: 'user' as const, content }]
+
+    setMessages(prev => [...prev, { role: 'user', content }, { role: 'assistant', content: '' }])
     setInput('')
     setStreaming(true)
 
-    const assistantMsg: Message = { role: 'assistant', content: '' }
-    setMessages([...newMessages, assistantMsg])
+    let accumulated = ''
 
     try {
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: newMessages }),
+        body: JSON.stringify({ messages: newHistory }),
       })
 
       if (!res.ok) {
@@ -68,20 +118,58 @@ export default function DashboardChat({ brand }: { brand: BrandProfile | null })
 
       const reader = res.body.getReader()
       const decoder = new TextDecoder()
-      let accumulated = ''
 
       while (true) {
         const { done, value } = await reader.read()
         if (done) break
         accumulated += decoder.decode(value, { stream: true })
-        setMessages([...newMessages, { role: 'assistant', content: accumulated }])
+        setMessages(prev => [...prev.slice(0, -1), { role: 'assistant', content: accumulated }])
       }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Something went wrong.'
-      setMessages([...newMessages, { role: 'assistant', content: `⚠ ${message}` }])
+      setMessages(prev => [...prev.slice(0, -1), { role: 'assistant', content: `⚠ ${message}` }])
     } finally {
       setStreaming(false)
     }
+
+    if (accumulated) {
+      try {
+        await fetch('/api/chat', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            conversation_id: conversationId,
+            user_content: content,
+            assistant_content: accumulated,
+          }),
+        })
+
+        // Auto-name conversation on first message
+        if (messages.length === 0 && convName === 'New conversation') {
+          const autoName = content.length > 45 ? content.slice(0, 45).trim() + '…' : content.trim()
+          setConvName(autoName)
+          setConversations(prev => prev.map(c => c.id === conversationId ? { ...c, name: autoName } : c))
+          await fetch(`/api/conversations/${conversationId}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: autoName }),
+          })
+        }
+      } catch { /* save failed silently */ }
+    }
+  }
+
+  async function switchConversation(id: string) {
+    if (id === conversationId || streaming) return
+    const conv = conversations.find(c => c.id === id)
+    setConversationId(id)
+    setConvName(conv?.name ?? '')
+    setMessages([])
+    try {
+      const msgRes = await fetch(`/api/chat?conversation_id=${id}`)
+      const msgs = await msgRes.json()
+      setMessages(Array.isArray(msgs) ? msgs : [])
+    } catch { /* silent */ }
   }
 
   function handleKey(e: React.KeyboardEvent) {
@@ -95,9 +183,34 @@ export default function DashboardChat({ brand }: { brand: BrandProfile | null })
 
   return (
     <div className="flex flex-col" style={{ height: '420px' }}>
+      {/* Conversation switcher */}
+      {!loading && conversations.length > 0 && (
+        <div className="px-3 pt-2 pb-1 shrink-0">
+          <select
+            value={conversationId ?? ''}
+            onChange={e => switchConversation(e.target.value)}
+            className="w-full text-xs px-2 py-1.5 rounded-lg outline-none transition-all"
+            style={{
+              background: 'var(--background)',
+              border: '1px solid var(--border)',
+              color: 'var(--muted)',
+              cursor: 'pointer',
+            }}
+          >
+            {conversations.slice(0, 8).map(c => (
+              <option key={c.id} value={c.id}>{c.name}</option>
+            ))}
+          </select>
+        </div>
+      )}
+
       {/* Messages */}
       <div className="flex-1 overflow-y-auto px-3 py-2 space-y-4">
-        {isEmpty ? (
+        {loading ? (
+          <div className="h-full flex items-center justify-center">
+            <p className="text-sm" style={{ color: 'var(--muted)' }}>Loading…</p>
+          </div>
+        ) : isEmpty ? (
           <div className="h-full flex flex-col items-center justify-center text-center px-4">
             <div className="text-2xl mb-3">✦</div>
             <p className="text-sm font-medium mb-1" style={{ color: 'var(--foreground)' }}>
@@ -153,7 +266,7 @@ export default function DashboardChat({ brand }: { brand: BrandProfile | null })
       </div>
 
       {/* Input */}
-      <div className="px-3 pb-3 pt-2 border-t" style={{ borderColor: 'var(--border)' }}>
+      <div className="px-3 pb-3 pt-2 border-t shrink-0" style={{ borderColor: 'var(--border)' }}>
         <div className="flex items-end gap-2">
           <textarea
             ref={inputRef}

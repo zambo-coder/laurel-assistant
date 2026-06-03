@@ -8,31 +8,33 @@ import { useState, useEffect } from 'react'
 
 const navSections = [
   {
-    label: 'Social Media',
+    label: 'Planning',
     defaultOpen: true,
     items: [
-      { href: '/captions', icon: '✦', label: 'Captions' },
-      { href: '/calendar', icon: '◻', label: 'Content Calendar' },
-      { href: '/campaign', icon: '◇', label: 'Campaigns' },
+      { href: '/strategy', icon: '◎', label: 'Strategy' },
+      { href: '/tasks', icon: '◻', label: 'Tasks' },
+      { href: '/schedule', icon: '◉', label: 'Schedule' },
     ],
   },
   {
-    label: 'Commercial',
-    defaultOpen: false,
+    label: 'AI Assistant',
+    defaultOpen: true,
     items: [
-      { href: '/inquiries', icon: '✉', label: 'Client Inquiries' },
+      { href: '/chat', icon: '✦', label: 'Chat' },
+      { href: '/captions', icon: '◈', label: 'Captions' },
+      { href: '/calendar', icon: '◻', label: 'Content Calendar' },
+      { href: '/campaign', icon: '◇', label: 'Campaigns' },
       { href: '/website-copy', icon: '◑', label: 'Website Copy' },
-      { href: '/assets', icon: '⊞', label: 'Asset Library' },
       { href: '/presence', icon: '◉', label: 'My Presence' },
     ],
   },
   {
-    label: 'Strategy',
+    label: 'Business',
     defaultOpen: false,
     items: [
-      { href: '/opportunities', icon: '◆', label: 'Opportunities' },
-      { href: '/roi', icon: '◎', label: 'ROI Tracker' },
-      { href: '/strategy', icon: '◈', label: 'Strategy Advisor' },
+      { href: '/inquiries', icon: '✉', label: 'Client Inquiries' },
+      { href: '/roi', icon: '◇', label: 'ROI Tracker' },
+      { href: '/assets', icon: '⊞', label: 'Asset Library' },
     ],
   },
 ]
@@ -114,17 +116,13 @@ export default function Sidebar({ brandName, logoUrl }: { brandName?: string; lo
         </div>
       </div>
 
-      {/* Dashboard + Chat — always visible */}
+      {/* Dashboard — always visible */}
       <div className="mb-4 space-y-0.5">
-        {[
-          { href: '/dashboard', icon: '◈', label: 'Dashboard' },
-          { href: '/chat', icon: '✦', label: 'AI Assistant' },
-        ].map(item => {
-          const active = pathname === item.href
+        {(() => {
+          const active = pathname === '/dashboard'
           return (
             <Link
-              key={item.href}
-              href={item.href}
+              href="/dashboard"
               className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-all"
               style={{
                 background: active ? 'var(--sidebar-active)' : 'transparent',
@@ -132,11 +130,11 @@ export default function Sidebar({ brandName, logoUrl }: { brandName?: string; lo
                 fontWeight: active ? '500' : '400',
               }}
             >
-              <span className="text-base w-4 text-center shrink-0">{item.icon}</span>
-              {item.label}
+              <span className="text-base w-4 text-center shrink-0">◈</span>
+              Dashboard
             </Link>
           )
-        })}
+        })()}
       </div>
 
       {/* Collapsible sections */}

@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { anthropic, MODEL } from '@/lib/anthropic'
+import { logUsage } from '@/lib/usage'
 import { buildBrandSystemPrompt } from '@/lib/brand-context'
 import { streamToResponse } from '@/lib/stream'
 import { InspirationRef, OpportunityItem } from '@/types'
@@ -30,6 +31,7 @@ export async function POST() {
     supabase.from('presence_analysis').select('url, platform, analysis, analyzed_at').order('analyzed_at', { ascending: false }).limit(10),
   ])
   if (!brand) return Response.json({ error: 'Brand profile not found' }, { status: 404 })
+  const model = brand.ai_text_model || MODEL
 
   // Deduplicate presence analyses — keep most recent per platform
   const seenPlatforms = new Set<string>()
@@ -69,13 +71,14 @@ Prioritise high-impact + low-effort items first. Be specific to her business —
 
   try {
     const stream = anthropic.messages.stream({
-      model: MODEL,
+      model,
       max_tokens: 2500,
       system: systemPrompt,
       messages: [{ role: 'user', content: userPrompt }],
     })
 
     stream.finalMessage().then(msg => {
+      logUsage(supabase, user.id, 'anthropic', model, 'opportunities', msg.usage.input_tokens, msg.usage.output_tokens)
       const text = msg.content[0].type === 'text' ? msg.content[0].text : ''
       try {
         const jsonMatch = text.match(/\[[\s\S]*\]/)

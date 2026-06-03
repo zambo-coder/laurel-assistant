@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { anthropic, MODEL } from '@/lib/anthropic'
+import { logUsage } from '@/lib/usage'
 import { buildBrandSystemPrompt } from '@/lib/brand-context'
 import { NextRequest } from 'next/server'
 import { CalendarFramework } from '@/types'
@@ -13,6 +14,7 @@ export async function POST(req: NextRequest) {
 
   const { data: brand } = await supabase.from('brand_profile').select('*').single()
   if (!brand) return Response.json({ error: 'Brand profile not found' }, { status: 404 })
+  const model = brand.ai_text_model || MODEL
 
   // Parse month for context
   const [year, month] = month_year.split('-').map(Number)
@@ -43,12 +45,13 @@ Return ONLY valid JSON in this exact shape:
 
   try {
     const message = await anthropic.messages.create({
-      model: MODEL,
+      model,
       max_tokens: 400,
       system: systemPrompt,
       messages: [{ role: 'user', content: userPrompt }],
     })
 
+    logUsage(supabase, user.id, 'anthropic', model, 'calendar_recommend', message.usage.input_tokens, message.usage.output_tokens)
     const text = message.content[0].type === 'text' ? message.content[0].text : ''
     const jsonMatch = text.match(/\{[\s\S]*\}/)
     if (!jsonMatch) throw new Error('Could not parse recommendation')

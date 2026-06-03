@@ -1,3 +1,8 @@
+export interface SocialLink {
+  label: string
+  url: string
+}
+
 export interface BrandProfile {
   id: string
   user_id: string
@@ -12,7 +17,11 @@ export interface BrandProfile {
   website_url: string
   etsy_url: string
   logo_url: string
+  social_links?: SocialLink[]
   dashboard_widgets?: DashboardWidget[]
+  task_categories?: { name: string; color: string }[]
+  ai_text_model?: string
+  ai_image_model?: string
   created_at: string
   updated_at: string
 }
@@ -39,6 +48,67 @@ export interface CalendarDay {
   theme: string
   post_idea: string
   format: 'reel' | 'carousel' | 'story' | 'static'
+  status?: 'idea' | 'planning' | 'filming' | 'editing' | 'scheduled' | 'posted'
+  notes?: string
+  caption?: string
+  posted_at?: string
+}
+
+export interface Project {
+  id: string
+  user_id: string
+  title: string
+  type: 'content' | 'client' | 'general'
+  status: 'active' | 'completed' | 'archived'
+  created_at: string
+  updated_at: string
+}
+
+export interface Task {
+  id: string
+  user_id: string
+  title: string
+  description?: string
+  status: 'todo' | 'in_progress' | 'done'
+  category: string
+  priority: 'low' | 'medium' | 'high'
+  due_date?: string
+  month_year?: string
+  calendar_day?: number
+  batch_group?: string
+  project_id?: string
+  goal_id?: string
+  focus_area_id?: string
+  depends_on: string[]
+  source: 'manual' | 'calendar' | 'ai'
+  created_at: string
+  updated_at: string
+}
+
+export interface Goal {
+  id: string
+  user_id: string
+  title: string
+  description?: string
+  timeframe: 'annual' | 'vision'
+  status: 'active' | 'achieved' | 'abandoned'
+  source: 'manual' | 'strategy_advisor'
+  created_at: string
+  updated_at: string
+}
+
+export interface FocusArea {
+  id: string
+  user_id: string
+  title: string
+  description?: string
+  goal_id?: string
+  quarter?: string
+  key_results: string[]
+  status: 'active' | 'completed' | 'paused'
+  source: 'manual' | 'strategy_advisor' | 'opportunities'
+  created_at: string
+  updated_at: string
 }
 
 export interface CalendarFramework {
@@ -76,26 +146,6 @@ export interface OutcomeLog {
   revenue: number
   log_date: string
   created_at: string
-}
-
-export interface RoadmapItem {
-  priority: number
-  title: string
-  effort: 'low' | 'medium' | 'high'
-  impact: 'low' | 'medium' | 'high'
-  weekly_actions: string[]
-}
-
-export interface Roadmap {
-  id: string
-  user_id: string
-  brain_dump: string
-  generated_plan: {
-    summary: string
-    priorities: RoadmapItem[]
-  } | null
-  created_at: string
-  updated_at: string
 }
 
 export interface Campaign {
@@ -171,6 +221,31 @@ export interface OpportunityItem {
   next_step: string
 }
 
+export interface Conversation {
+  id: string
+  user_id: string
+  name: string
+  tags: string[]
+  created_at: string
+  updated_at: string
+}
+
+export interface Asset {
+  id: string
+  user_id: string
+  name: string
+  type: 'design' | 'brand' | 'mockup'
+  url: string
+  storage_path: string
+  mime_type?: string
+  size_bytes?: number
+  tags: string[]
+  notes?: string
+  source: 'upload' | 'ai_generated'
+  source_asset_id?: string
+  created_at: string
+}
+
 export type DashboardWidget =
   | 'chat' | 'quick_actions' | 'top_opportunities'
-  | 'recent_captions' | 'website_card' | 'upcoming_posts'
+  | 'recent_captions' | 'website_card' | 'upcoming_posts' | 'tasks'

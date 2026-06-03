@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { anthropic, MODEL } from '@/lib/anthropic'
+import { logUsage } from '@/lib/usage'
 import { buildBrandSystemPrompt } from '@/lib/brand-context'
 import { NextRequest } from 'next/server'
 import { InspirationRef } from '@/types'
@@ -30,6 +31,7 @@ export async function POST(req: NextRequest) {
     supabase.from('inspiration_refs').select('*').order('created_at', { ascending: false }),
   ])
   if (!brand) return Response.json({ error: 'Brand profile not found' }, { status: 404 })
+  const model = brand.ai_text_model || MODEL
 
   // Attempt to fetch website content for richer analysis
   let pageSnippet = ''
@@ -80,25 +82,29 @@ Return JSON in this exact shape:
 
   try {
     const message = await anthropic.messages.create({
-      model: MODEL,
+      model,
       max_tokens: 800,
       system: systemPrompt,
       messages: [{ role: 'user', content: userPrompt }],
     })
 
+    logUsage(supabase, user.id, 'anthropic', model, 'presence', message.usage.input_tokens, message.usage.output_tokens)
     const text = message.content[0].type === 'text' ? message.content[0].text : ''
     const jsonMatch = text.match(/\{[\s\S]*\}/)
     if (!jsonMatch) return Response.json({ error: 'Could not parse analysis' }, { status: 500 })
 
     const analysis = JSON.parse(jsonMatch[0])
 
-    const { data: saved } = await supabase.from('presence_analysis').upsert({
+    const { data: saved, error: saveError } = await supabase.from('presence_analysis').upsert({
       user_id: user.id,
       url,
       platform,
       analysis,
       analyzed_at: new Date().toISOString(),
     }, { onConflict: 'user_id,url' }).select().single()
+
+    if (saveError) return Response.json({ error: saveError.message }, { status: 500 })
+    if (!saved) return Response.json({ error: 'Save returned no data' }, { status: 500 })
 
     return Response.json(saved)
   } catch (err: unknown) {

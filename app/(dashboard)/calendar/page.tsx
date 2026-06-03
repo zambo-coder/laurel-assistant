@@ -5,12 +5,16 @@ import toast from 'react-hot-toast'
 import PageHeader from '@/components/ui/PageHeader'
 import Button from '@/components/ui/Button'
 import Card from '@/components/ui/Card'
+import DayModal from '@/components/calendar/DayModal'
 import { CalendarDay, CalendarFramework } from '@/types'
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
 const FORMAT_COLORS: Record<string, string> = {
   reel: 'var(--badge-reel)', carousel: 'var(--badge-carousel)', story: 'var(--badge-story)', static: 'var(--badge-static)',
+}
+const STATUS_COLORS: Record<string, string> = {
+  idea: '#9e9e9e', planning: '#7a9478', filming: '#c4a06a', editing: '#8b7ab0', scheduled: '#5a8fbe', posted: '#4a7a4a',
 }
 const FORMAT_TEXT: Record<string, string> = {
   reel: 'var(--accent)', carousel: 'var(--accent)', story: 'var(--accent)', static: 'var(--accent)',
@@ -62,18 +66,35 @@ export default function CalendarPage() {
 
   // Calendar state
   const [days, setDays] = useState<CalendarDay[]>([])
+  const [savedDays, setSavedDays] = useState<CalendarDay[]>([])
+  const [isProposal, setIsProposal] = useState(false)
+  const [saving, setSaving] = useState(false)
   const [generating, setGenerating] = useState(false)
   const [calendarLoading, setCalendarLoading] = useState(false)
 
-  // Per-day pending proposals
+  // Proposal selection
+  const [checkedDays, setCheckedDays] = useState<Set<number>>(new Set())
+
+  // Post-save task generation offer
+  const [showTasksOffer, setShowTasksOffer] = useState(false)
+  const [generatingBatchTasks, setGeneratingBatchTasks] = useState(false)
+
+  // Per-day pending proposals (individual ↺ regenerations)
   const [pending, setPending] = useState<Record<number, CalendarDay | null>>({})
   const [regenerating, setRegenerating] = useState<Record<number, boolean>>({})
+
+  // Day modal
+  const [modalDay, setModalDay] = useState<CalendarDay | null>(null)
 
   const monthYear = `${year}-${String(month + 1).padStart(2, '0')}`
   const daysInMonth = getDaysInMonth(year, month)
   const firstDay = getFirstDayOfMonth(year, month)
   const postCount = countPostsInMonth(year, month, framework.posting_days)
   const hasCalendar = days.length > 0
+
+  // Computed maps
+  const dayMap = new Map(days.map(d => [d.day, d]))
+  const savedDayMap = new Map(savedDays.map(d => [d.day, d]))
 
   // Load calendar + recommendation on month change
   useEffect(() => {
@@ -85,12 +106,17 @@ export default function CalendarPage() {
   async function loadCalendar() {
     setCalendarLoading(true)
     setDays([])
+    setSavedDays([])
     setPending({})
+    setIsProposal(false)
+    setCheckedDays(new Set())
+    setShowTasksOffer(false)
     try {
       const res = await fetch(`/api/calendar?month_year=${monthYear}`)
       const data = await res.json()
       if (data?.days) {
         setDays(data.days)
+        setSavedDays(data.days)
         setFrameworkExpanded(false)
         if (data.framework) {
           setFramework(data.framework)
@@ -101,6 +127,44 @@ export default function CalendarPage() {
       }
     } catch { /* no calendar yet */ }
     finally { setCalendarLoading(false) }
+  }
+
+  async function saveCalendar() {
+    setSaving(true)
+    try {
+      // Compute final days: kept saved + accepted proposals
+      const proposalDayNums = new Set(days.map(d => d.day))
+      const keptSaved = savedDays.filter(d => !proposalDayNums.has(d.day) || !checkedDays.has(d.day))
+      const accepted = days.filter(d => checkedDays.has(d.day))
+      const finalDays = [...keptSaved, ...accepted].sort((a, b) => a.day - b.day)
+
+      const res = await fetch('/api/calendar', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'save_all', month_year: monthYear, days: finalDays, framework }),
+      })
+      if (!res.ok) throw new Error()
+      setSavedDays(finalDays)
+      setDays(finalDays)
+      setIsProposal(false)
+      setShowTasksOffer(finalDays.length > 0)
+      toast.success(`Calendar saved — ${finalDays.length} post${finalDays.length !== 1 ? 's' : ''}`)
+    } catch {
+      toast.error('Could not save calendar')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  function discardProposal() {
+    setDays([...savedDays])
+    setIsProposal(false)
+    setCheckedDays(new Set())
+  }
+
+  function removeDayFromProposal(dayNum: number) {
+    setDays(prev => prev.filter(d => d.day !== dayNum))
+    setCheckedDays(prev => { const n = new Set(prev); n.delete(dayNum); return n })
   }
 
   async function loadRecommendation() {
@@ -142,6 +206,8 @@ export default function CalendarPage() {
     setGenerating(true)
     setDays([])
     setPending({})
+    setCheckedDays(new Set())
+    setShowTasksOffer(false)
 
     try {
       const res = await fetch('/api/calendar', {
@@ -158,15 +224,21 @@ export default function CalendarPage() {
       const reader = res.body.getReader()
       const decoder = new TextDecoder()
       let full = ''
+      let latestDays: CalendarDay[] = []
       while (true) {
         const { done, value } = await reader.read()
         if (done) break
         full += decoder.decode(value, { stream: true })
         const partial = parseCalendarClient(full)
-        if (partial.length > 0) setDays(partial)
+        if (partial.length > 0) {
+          setDays(partial)
+          latestDays = partial
+        }
       }
       setFrameworkExpanded(false)
       setFrameworkDirty(false)
+      setIsProposal(true)
+      setCheckedDays(new Set(latestDays.map(d => d.day)))
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : 'Generation failed')
     } finally {
@@ -204,6 +276,65 @@ export default function CalendarPage() {
     setPending(p => { const n = { ...p }; delete n[dayNum]; return n })
   }
 
+  async function generateBatchTasks() {
+    setGeneratingBatchTasks(true)
+    let totalTasks = 0
+    try {
+      for (const calDay of savedDays) {
+        try {
+          let projectId: string | undefined
+          const projectTitle = calDay.theme?.trim() || `${monthYear} Day ${calDay.day}`
+          const projectRes = await fetch('/api/projects', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ title: projectTitle, type: 'content' }),
+          })
+          if (projectRes.ok) {
+            const p = await projectRes.json()
+            projectId = p.id
+          }
+
+          const tasksRes = await fetch('/api/tasks/generate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              month_year: monthYear,
+              day: calDay.day,
+              post_idea: calDay.post_idea,
+              theme: calDay.theme,
+              format: calDay.format,
+            }),
+          })
+          const data = await tasksRes.json()
+          if (!tasksRes.ok || !data.tasks?.length) continue
+
+          await Promise.all(
+            data.tasks.map((t: { title: string; category: string; priority: string; batch_group: string }) =>
+              fetch('/api/tasks', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  ...t,
+                  month_year: monthYear,
+                  calendar_day: calDay.day,
+                  source: 'calendar',
+                  project_id: projectId,
+                }),
+              })
+            )
+          )
+          totalTasks += data.tasks.length
+        } catch { /* skip failed days */ }
+      }
+      toast.success(`${totalTasks} tasks created across ${savedDays.length} posts`)
+      setShowTasksOffer(false)
+    } catch {
+      toast.error('Could not generate tasks')
+    } finally {
+      setGeneratingBatchTasks(false)
+    }
+  }
+
   function exportCalendar() {
     const sorted = [...days].sort((a, b) => a.day - b.day)
     const text = sorted.map(d => `Day ${d.day} (${d.format.toUpperCase()}) — ${d.theme}\n${d.post_idea}`).join('\n\n')
@@ -213,8 +344,6 @@ export default function CalendarPage() {
 
   function prevMonth() { if (month === 0) { setMonth(11); setYear(y => y - 1) } else setMonth(m => m - 1) }
   function nextMonth() { if (month === 11) { setMonth(0); setYear(y => y + 1) } else setMonth(m => m + 1) }
-
-  const dayMap = new Map(days.map(d => [d.day, d]))
 
   return (
     <div>
@@ -347,6 +476,63 @@ export default function CalendarPage() {
         )}
       </Card>
 
+      {/* Proposal banner */}
+      {isProposal && days.length > 0 && (
+        <div
+          className="flex items-center justify-between px-4 py-3 rounded-xl mb-5"
+          style={{ background: '#f5c76a20', border: '1px solid #f5c76a' }}
+        >
+          <div>
+            <p className="text-sm font-medium" style={{ color: '#7a4f00' }}>
+              {checkedDays.size} of {days.length} posts selected
+            </p>
+            <p className="text-xs" style={{ color: '#a06800' }}>
+              Uncheck any posts you don't want, then save to confirm.
+              {savedDays.length > 0 && ' Existing posts not in this proposal are kept.'}
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={discardProposal}
+              className="text-xs px-3 py-1.5 rounded-lg transition-opacity hover:opacity-70"
+              style={{ color: '#7a4f00', border: '1px solid #f5c76a' }}
+            >
+              {savedDays.length > 0 ? 'Revert to saved' : 'Discard'}
+            </button>
+            <Button size="sm" onClick={saveCalendar} loading={saving} disabled={checkedDays.size === 0 && savedDays.length === 0}>
+              Save calendar
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Post-save task generation offer */}
+      {showTasksOffer && !isProposal && (
+        <div
+          className="flex items-center justify-between px-4 py-3 rounded-xl mb-5"
+          style={{ background: '#7a947820', border: '1px solid #7a9478' }}
+        >
+          <div>
+            <p className="text-sm font-medium" style={{ color: 'var(--foreground)' }}>Generate production tasks?</p>
+            <p className="text-xs" style={{ color: 'var(--muted)' }}>
+              Create task lists for all {savedDays.length} post{savedDays.length !== 1 ? 's' : ''} — one project per post, linked to this calendar.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowTasksOffer(false)}
+              className="text-xs px-3 py-1.5 rounded-lg hover:opacity-70 transition-opacity"
+              style={{ color: 'var(--muted)' }}
+            >
+              Skip
+            </button>
+            <Button size="sm" onClick={generateBatchTasks} loading={generatingBatchTasks}>
+              Generate tasks
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* Calendar grid */}
       {calendarLoading ? (
         <div className="text-center py-12">
@@ -367,59 +553,113 @@ export default function CalendarPage() {
 
             {Array.from({ length: daysInMonth }).map((_, i) => {
               const dayNum = i + 1
-              const dayData = dayMap.get(dayNum)
               const proposal = pending[dayNum]
               const isRegenerating = regenerating[dayNum]
               const hasPending = !!proposal
+
+              // In proposal mode: proposal days come from dayMap, existing saved shown via savedDayMap
+              const proposedData = isProposal ? dayMap.get(dayNum) : undefined
+              const savedData = savedDayMap.get(dayNum)
+              const dayData = isProposal ? (proposedData ?? savedData) : dayMap.get(dayNum)
+
+              const isProposalCell = isProposal && !!proposedData
+              const isKeptSaved = isProposal && !proposedData && !!savedData
+              const replacesExisting = isProposalCell && !!savedData
+              const isChecked = isProposalCell ? checkedDays.has(dayNum) : true
+
               const isPostingDay = framework.posting_days.includes(new Date(year, month, dayNum).getDay())
 
               return (
                 <div
                   key={dayNum}
-                  className="rounded-xl p-2.5 relative group min-h-[100px] transition-all"
+                  className={`rounded-xl p-2.5 relative group min-h-[100px] transition-all${dayData && !hasPending && !isProposalCell ? ' cursor-pointer' : isProposalCell ? ' cursor-pointer' : ''}`}
                   style={{
                     background: hasPending
                       ? 'var(--pending-bg)'
-                      : dayData
-                        ? FORMAT_COLORS[dayData.format]
-                        : isPostingDay
-                          ? 'var(--cream-200)'
-                          : 'var(--background)',
-                    border: `1px solid ${hasPending ? '#f5c76a' : 'var(--border)'}`,
-                    opacity: isRegenerating ? 0.5 : 1,
+                      : isProposalCell
+                        ? FORMAT_COLORS[proposedData!.format]
+                        : dayData
+                          ? FORMAT_COLORS[dayData.format]
+                          : isPostingDay
+                            ? 'var(--cream-200)'
+                            : 'var(--background)',
+                    border: `1px solid ${hasPending ? '#f5c76a' : isProposalCell && !isChecked ? 'var(--border)' : 'var(--border)'}`,
+                    opacity: isRegenerating ? 0.5 : isProposalCell && !isChecked ? 0.45 : 1,
+                  }}
+                  onClick={() => {
+                    if (hasPending) return
+                    if (dayData) setModalDay(dayData)
                   }}
                 >
-                  {/* Day number */}
+                  {/* Day number row */}
                   <div className="flex items-start justify-between mb-1.5">
-                    <span className="text-xs font-semibold" style={{ color: isPostingDay ? 'var(--stone-600,#655a4d)' : 'var(--muted)' }}>
-                      {dayNum}
-                    </span>
-                    {(dayData && !hasPending) && (
+                    <div className="flex items-center gap-1">
+                      <span className="text-xs font-semibold" style={{ color: isPostingDay ? 'var(--stone-600,#655a4d)' : 'var(--muted)' }}>
+                        {dayNum}
+                      </span>
+                      {dayData?.status && (
+                        <div
+                          className="w-1.5 h-1.5 rounded-full shrink-0"
+                          style={{ background: STATUS_COLORS[dayData.status] }}
+                          title={dayData.status}
+                        />
+                      )}
+                    </div>
+
+                    {isProposalCell ? (
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        onChange={e => {
+                          e.stopPropagation()
+                          setCheckedDays(prev => {
+                            const n = new Set(prev)
+                            if (e.target.checked) n.add(dayNum)
+                            else n.delete(dayNum)
+                            return n
+                          })
+                        }}
+                        onClick={e => e.stopPropagation()}
+                        className="shrink-0 mt-0.5 cursor-pointer"
+                        style={{ accentColor: 'var(--foreground)', width: '13px', height: '13px' }}
+                        title={isChecked ? 'Will be saved' : 'Will not be saved'}
+                      />
+                    ) : isKeptSaved ? (
+                      <span className="text-[9px] px-1.5 py-0.5 rounded-full shrink-0" style={{ background: 'var(--border)', color: 'var(--muted)' }}>
+                        saved
+                      </span>
+                    ) : (dayData && !hasPending) ? (
                       <span className="text-[9px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded-full"
                         style={{ background: 'rgba(255,255,255,0.7)', color: FORMAT_TEXT[dayData.format] }}>
                         {dayData.format}
                       </span>
-                    )}
-                    {hasPending && (
+                    ) : hasPending ? (
                       <span className="text-[9px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded-full"
                         style={{ background: '#f5c76a', color: '#7a4f00' }}>
                         New
                       </span>
-                    )}
+                    ) : null}
                   </div>
 
-                  {/* Pending proposal */}
+                  {/* "Replaces" warning */}
+                  {replacesExisting && isChecked && (
+                    <p className="text-[9px] font-semibold uppercase tracking-widest mb-1 leading-tight" style={{ color: '#c07a6a' }}>
+                      Replaces existing
+                    </p>
+                  )}
+
+                  {/* Content */}
                   {hasPending && proposal ? (
                     <>
                       <p className="text-[10px] font-medium leading-tight mb-1" style={{ color: 'var(--foreground)' }}>{proposal.theme}</p>
                       <p className="text-[10px] leading-tight mb-2" style={{ color: 'var(--stone-500,#7c6e5e)' }}>{proposal.post_idea}</p>
                       <div className="flex gap-1">
-                        <button onClick={() => acceptProposal(dayNum)}
+                        <button onClick={e => { e.stopPropagation(); acceptProposal(dayNum) }}
                           className="flex-1 py-1 rounded-lg text-[10px] font-semibold transition-all hover:opacity-80"
                           style={{ background: 'var(--foreground)', color: 'var(--background)' }}>
                           ✓ Accept
                         </button>
-                        <button onClick={() => rejectProposal(dayNum)}
+                        <button onClick={e => { e.stopPropagation(); rejectProposal(dayNum) }}
                           className="flex-1 py-1 rounded-lg text-[10px] font-semibold transition-all hover:opacity-80"
                           style={{ background: 'var(--border)', color: 'var(--muted)' }}>
                           ✗ Keep
@@ -434,9 +674,18 @@ export default function CalendarPage() {
                         <div className="absolute top-1.5 right-1.5">
                           <span className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin inline-block" style={{ color: 'var(--muted)' }} />
                         </div>
-                      ) : (
+                      ) : isProposalCell ? (
                         <button
-                          onClick={() => proposeRegenerate(dayNum)}
+                          onClick={e => { e.stopPropagation(); removeDayFromProposal(dayNum) }}
+                          className="absolute bottom-1.5 right-1.5 opacity-0 group-hover:opacity-100 text-[10px] p-0.5 rounded transition-opacity"
+                          style={{ color: 'var(--muted)' }}
+                          title="Remove from proposal"
+                        >
+                          ×
+                        </button>
+                      ) : !isProposal ? (
+                        <button
+                          onClick={e => { e.stopPropagation(); proposeRegenerate(dayNum) }}
                           disabled={generating}
                           className="absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 text-xs p-0.5 rounded transition-opacity"
                           style={{ color: 'var(--muted)' }}
@@ -444,7 +693,7 @@ export default function CalendarPage() {
                         >
                           ↺
                         </button>
-                      )}
+                      ) : null}
                     </>
                   ) : isPostingDay && generating ? (
                     <div className="flex items-center justify-center h-12">
@@ -469,6 +718,31 @@ export default function CalendarPage() {
             </div>
           )}
         </>
+      )}
+
+      {/* Day modal */}
+      {modalDay && (
+        <DayModal
+          day={modalDay}
+          monthYear={monthYear}
+          isProposal={isProposal}
+          onClose={() => setModalDay(null)}
+          onSave={updated => {
+            setDays(prev => {
+              const without = prev.filter(d => d.day !== modalDay!.day && d.day !== updated.day)
+              return [...without, updated].sort((a, b) => a.day - b.day)
+            })
+            // Keep checkedDays consistent if day number changed
+            if (isProposal && updated.day !== modalDay.day) {
+              setCheckedDays(prev => {
+                const n = new Set(prev)
+                if (n.has(modalDay!.day)) { n.delete(modalDay!.day); n.add(updated.day) }
+                return n
+              })
+            }
+            setModalDay(null)
+          }}
+        />
       )}
     </div>
   )

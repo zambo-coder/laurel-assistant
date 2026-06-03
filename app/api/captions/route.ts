@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { anthropic, MODEL } from '@/lib/anthropic'
+import { logUsage } from '@/lib/usage'
 import { buildBrandSystemPrompt } from '@/lib/brand-context'
 import { streamToResponse } from '@/lib/stream'
 import { NextRequest } from 'next/server'
@@ -41,9 +42,10 @@ LOCAL_TAGS_2: [hashtags]
 
 Write hashtags as space-separated strings starting with #. Make each caption feel distinct.`
 
+  const model = brand.ai_text_model || MODEL
   try {
     const stream = anthropic.messages.stream({
-      model: MODEL,
+      model,
       max_tokens: 2048,
       system: systemPrompt,
       messages: [{ role: 'user', content: `Post description: ${prompt}` }],
@@ -51,6 +53,7 @@ Write hashtags as space-separated strings starting with #. Make each caption fee
 
     // Save to history after stream completes (non-blocking)
     stream.finalMessage().then(msg => {
+      logUsage(supabase, user.id, 'anthropic', model, 'captions', msg.usage.input_tokens, msg.usage.output_tokens)
       const fullText = msg.content[0].type === 'text' ? msg.content[0].text : ''
       const parsed = parseCaptions(fullText)
       if (parsed.length > 0) {

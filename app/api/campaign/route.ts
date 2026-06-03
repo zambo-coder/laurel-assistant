@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { anthropic, MODEL } from '@/lib/anthropic'
+import { logUsage } from '@/lib/usage'
 import { buildBrandSystemPrompt } from '@/lib/brand-context'
 import { streamToResponse } from '@/lib/stream'
 import { NextRequest } from 'next/server'
@@ -13,6 +14,7 @@ export async function POST(req: NextRequest) {
 
   const { data: brand } = await supabase.from('brand_profile').select('*').single()
   if (!brand) return new Response('Brand profile not found', { status: 404 })
+  const model = brand.ai_text_model || MODEL
 
   const systemPrompt = `${buildBrandSystemPrompt(brand)}
 
@@ -34,13 +36,14 @@ engagement_tactic: one short action (e.g. "Ask a question in caption")`
 
   try {
     const stream = anthropic.messages.stream({
-      model: MODEL,
+      model,
       max_tokens: 3000,
       system: systemPrompt,
       messages: [{ role: 'user', content: `Goal: ${goal}${service_description ? `\nService: ${service_description}` : ''}` }],
     })
 
     stream.finalMessage().then(msg => {
+      logUsage(supabase, user.id, 'anthropic', model, 'campaign', msg.usage.input_tokens, msg.usage.output_tokens)
       const fullText = msg.content[0].type === 'text' ? msg.content[0].text : ''
       void supabase.from('campaigns').insert({
         user_id: user.id,

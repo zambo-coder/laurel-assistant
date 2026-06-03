@@ -43,22 +43,25 @@ export default function PresenceClient({ pages, initialAnalyses }: Props) {
   const [loading, setLoading] = useState<Record<string, boolean>>({})
 
   function getAnalysis(url: string) {
-    return analyses.find(a => a.url === url) ?? null
+    return analyses.find(a => a != null && a.url === url) ?? null
   }
+
+  const [errors, setErrors] = useState<Record<string, string>>({})
 
   async function analyse(page: PageEntry) {
     setLoading(p => ({ ...p, [page.url]: true }))
+    setErrors(p => ({ ...p, [page.url]: '' }))
     try {
       const res = await fetch('/api/presence', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url: page.url, platform: page.platform }),
       })
-      if (!res.ok) throw new Error()
-      const result: PresenceAnalysis = await res.json()
-      setAnalyses(p => [result, ...p.filter(a => a.url !== page.url)])
-    } catch {
-      // silently fail
+      const body = await res.json()
+      if (!res.ok) throw new Error(body?.error ?? 'Analysis failed')
+      setAnalyses(p => [body, ...p.filter(a => a != null && a.url !== page.url)])
+    } catch (err) {
+      setErrors(p => ({ ...p, [page.url]: err instanceof Error ? err.message : 'Analysis failed' }))
     } finally {
       setLoading(p => ({ ...p, [page.url]: false }))
     }
@@ -195,7 +198,13 @@ export default function PresenceClient({ pages, initialAnalyses }: Props) {
                 </div>
               )}
 
-              {!isLoading && !analysis && (
+              {!isLoading && errors[page.url] && (
+                <p className="text-sm" style={{ color: '#c07a6a' }}>
+                  Error: {errors[page.url]}
+                </p>
+              )}
+
+              {!isLoading && !analysis && !errors[page.url] && (
                 <p className="text-sm" style={{ color: 'var(--muted)' }}>
                   Click Analyse to get a detailed breakdown.
                 </p>

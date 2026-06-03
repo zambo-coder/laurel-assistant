@@ -3,6 +3,16 @@ import { BrandProfile, InspirationRef } from '@/types'
 export function buildBrandSystemPrompt(brand: BrandProfile, refs?: InspirationRef[]): string {
   const languageList = brand.languages?.join(', ') || 'Spanish, English, Danish'
 
+  const profileLines: string[] = []
+  if (brand.social_links?.length) {
+    brand.social_links.forEach(l => profileLines.push(`${l.label}: ${l.url}`))
+  } else if (brand.instagram_handle) {
+    profileLines.push(`Instagram: @${brand.instagram_handle}`)
+  }
+  if (brand.website_url && !profileLines.some(l => l.toLowerCase().includes('website'))) {
+    profileLines.push(`Website: ${brand.website_url}`)
+  }
+
   let prompt = `You are a creative business assistant for ${brand.business_name}, a boutique wedding invitation design studio.
 
 BRAND IDENTITY:
@@ -11,8 +21,7 @@ BRAND IDENTITY:
 - Target clients: ${brand.target_clients}
 - Design style & tone: ${brand.design_style}
 - Services & pricing: ${brand.services_pricing}
-- Current business goals: ${brand.business_goals}
-- Instagram: @${brand.instagram_handle}
+- Current business goals: ${brand.business_goals}${profileLines.length ? `\n- Online profiles: ${profileLines.join(', ')}` : ''}
 - Working languages: ${languageList}
 
 VOICE & TONE GUIDELINES:

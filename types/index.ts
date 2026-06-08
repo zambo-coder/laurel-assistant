@@ -61,6 +61,7 @@ export interface Project {
   type: 'content' | 'client' | 'general'
   status: 'active' | 'completed' | 'archived'
   focus_area_id?: string
+  goal_id?: string
   created_at: string
   updated_at: string
 }

@@ -8,12 +8,14 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   const { id } = await params
   const updates = await req.json()
-  const { title, type, status } = updates
+  const { title, type, status, focus_area_id, goal_id } = updates
 
   const fields: Record<string, unknown> = { updated_at: new Date().toISOString() }
   if (title !== undefined) fields.title = title
   if (type !== undefined) fields.type = type
   if (status !== undefined) fields.status = status
+  if (focus_area_id !== undefined) fields.focus_area_id = focus_area_id
+  if (goal_id !== undefined) fields.goal_id = goal_id
 
   const { error } = await supabase
     .from('projects')

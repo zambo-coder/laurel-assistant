@@ -13,6 +13,7 @@ const navSections = [
     items: [
       { href: '/strategy', icon: '◎', label: 'Strategy' },
       { href: '/tasks', icon: '◻', label: 'Tasks' },
+      { href: '/projects', icon: '⬡', label: 'Projects' },
       { href: '/schedule', icon: '◉', label: 'Schedule' },
     ],
   },

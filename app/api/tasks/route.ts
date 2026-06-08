@@ -18,11 +18,13 @@ export async function GET(req: NextRequest) {
   const monthYear = req.nextUrl.searchParams.get('month_year')
   const calendarDay = req.nextUrl.searchParams.get('calendar_day')
   const scheduleMonth = req.nextUrl.searchParams.get('schedule_month')
+  const projectId = req.nextUrl.searchParams.get('project_id')
 
   if (status && status !== 'all') query = query.eq('status', status)
   if (category && category !== 'all') query = query.eq('category', category)
   if (monthYear) query = query.eq('month_year', monthYear)
   if (calendarDay) query = query.eq('calendar_day', parseInt(calendarDay))
+  if (projectId) query = query.eq('project_id', projectId)
   if (scheduleMonth) {
     const [y, m] = scheduleMonth.split('-').map(Number)
     const lastDay = new Date(y, m, 0).getDate()

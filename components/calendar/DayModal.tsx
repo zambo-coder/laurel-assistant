@@ -114,6 +114,8 @@ export default function DayModal({ day, monthYear, isProposal, onClose, onSave, 
     const selected = proposedTasks.filter(t => t.selected)
     if (!selected.length) { setProposedTasks([]); return }
     setAddingTasks(true)
+    const [yr, mo] = monthYear.split('-')
+    const dueDate = `${yr}-${mo}-${String(form.day).padStart(2, '0')}`
     try {
       // Auto-create a content project for this calendar post
       let projectId: string | undefined
@@ -130,13 +132,30 @@ export default function DayModal({ day, monthYear, isProposal, onClose, onSave, 
         }
       } catch { /* non-fatal — tasks still created without project */ }
 
-      await Promise.all(selected.map(t =>
-        fetch('/api/tasks', {
+      // Create sequentially and chain: each task depends on the previous one
+      let prevId: string | undefined
+      for (const t of selected) {
+        const res = await fetch('/api/tasks', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ...t, month_year: monthYear, calendar_day: form.day, source: 'calendar', project_id: projectId, selected: undefined }),
+          body: JSON.stringify({
+            title: t.title,
+            category: t.category,
+            priority: t.priority,
+            batch_group: t.batch_group,
+            due_date: dueDate,
+            month_year: monthYear,
+            calendar_day: form.day,
+            source: 'calendar',
+            project_id: projectId,
+            depends_on: prevId ? [prevId] : [],
+          }),
         })
-      ))
+        if (res.ok) {
+          const created = await res.json()
+          prevId = created.id
+        }
+      }
       // Refresh linked tasks list
       const refreshed = await fetch(`/api/tasks?month_year=${monthYear}&calendar_day=${form.day}`).then(r => r.json()).catch(() => [])
       setLinkedTasks(Array.isArray(refreshed) ? refreshed : [])

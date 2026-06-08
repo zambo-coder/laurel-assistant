@@ -59,7 +59,6 @@ export default function CalendarPage() {
 
   // Framework state
   const [framework, setFramework] = useState<CalendarFramework>({ posts_per_week: 4, posting_days: [1, 3, 5, 0], monthly_focus: '' })
-  const [reasoning, setReasoning] = useState<string>('')
   const [frameworkLoading, setFrameworkLoading] = useState(false)
   const [frameworkExpanded, setFrameworkExpanded] = useState(true)
   const [frameworkDirty, setFrameworkDirty] = useState(false)
@@ -96,10 +95,9 @@ export default function CalendarPage() {
   const dayMap = new Map(days.map(d => [d.day, d]))
   const savedDayMap = new Map(savedDays.map(d => [d.day, d]))
 
-  // Load calendar + recommendation on month change
+  // Load calendar on month change; recommendation is user-triggered
   useEffect(() => {
     loadCalendar()
-    loadRecommendation()
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [monthYear])
 
@@ -172,7 +170,6 @@ export default function CalendarPage() {
 
   async function loadRecommendation() {
     setFrameworkLoading(true)
-    setReasoning('')
     try {
       const res = await fetch('/api/calendar/recommend', {
         method: 'POST',
@@ -180,9 +177,11 @@ export default function CalendarPage() {
         body: JSON.stringify({ month_year: monthYear }),
       })
       const data = await res.json()
-      if (data.reasoning) setReasoning(data.reasoning)
+      if (data.reasoning) {
+        updateFramework({ monthly_focus: data.reasoning })
+      }
       if (data.framework && !hasCalendar) {
-        setFramework(data.framework)
+        setFramework(f => ({ ...f, ...data.framework, monthly_focus: data.reasoning ?? f.monthly_focus }))
         setFrameworkDirty(false)
       }
     } catch { /* non-critical */ }
@@ -280,11 +279,17 @@ export default function CalendarPage() {
   }
 
   async function generateBatchTasks() {
+    if (savedDays.length === 0) {
+      toast.error('Save the calendar first before generating tasks')
+      return
+    }
     setGeneratingBatchTasks(true)
     let totalTasks = 0
+    const [yr, mo] = monthYear.split('-')
     try {
       for (const calDay of savedDays) {
         try {
+          const dueDate = `${yr}-${mo}-${String(calDay.day).padStart(2, '0')}`
           let projectId: string | undefined
           const projectTitle = calDay.theme?.trim() || `${monthYear} Day ${calDay.day}`
           const projectRes = await fetch('/api/projects', {
@@ -319,6 +324,7 @@ export default function CalendarPage() {
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
                 ...t,
+                due_date: dueDate,
                 month_year: monthYear,
                 calendar_day: calDay.day,
                 source: 'calendar',
@@ -387,17 +393,35 @@ export default function CalendarPage() {
 
         {frameworkExpanded && (
           <div className="mt-5 space-y-5">
-            {/* AI reasoning */}
-            {frameworkLoading ? (
-              <div className="p-4 rounded-xl text-sm" style={{ background: 'var(--cream-200)' }}>
-                <span className="streaming-cursor" style={{ color: 'var(--muted)' }}>Analysing your brand and this month</span>
+            {/* Monthly context — editable, AI-fillable */}
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="text-sm font-medium" style={{ color: 'var(--foreground)' }}>
+                  Monthly context <span className="font-normal" style={{ color: 'var(--muted)' }}>(optional)</span>
+                </label>
+                <button
+                  onClick={loadRecommendation}
+                  disabled={frameworkLoading}
+                  className="flex items-center gap-1 text-xs px-2.5 py-1 rounded-lg transition-opacity hover:opacity-70 disabled:opacity-40"
+                  style={{ background: 'var(--cream-200)', color: 'var(--muted)', border: '1px solid var(--border)' }}
+                >
+                  {frameworkLoading ? (
+                    <span className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin inline-block" />
+                  ) : '✦'}
+                  {frameworkLoading ? 'Thinking…' : 'Get AI suggestion'}
+                </button>
               </div>
-            ) : reasoning ? (
-              <div className="p-4 rounded-xl" style={{ background: 'var(--cream-200)' }}>
-                <p className="text-xs font-semibold uppercase tracking-widest mb-2" style={{ color: 'var(--muted)' }}>AI recommendation</p>
-                <p className="text-sm leading-relaxed" style={{ color: 'var(--foreground)' }}>{reasoning}</p>
-              </div>
-            ) : null}
+              <textarea
+                value={framework.monthly_focus}
+                onChange={e => updateFramework({ monthly_focus: e.target.value })}
+                rows={4}
+                placeholder="Describe what's happening this month — launches, seasons, campaigns, goals. Or click 'Get AI suggestion' to auto-fill."
+                className="w-full px-4 py-2.5 rounded-lg text-sm outline-none transition-all resize-none"
+                style={{ background: 'var(--background)', border: '1.5px solid var(--border)', color: 'var(--foreground)' }}
+                onFocus={e => (e.target.style.borderColor = 'var(--accent)')}
+                onBlur={e => (e.target.style.borderColor = 'var(--border)')}
+              />
+            </div>
 
             {/* Posts per week slider */}
             <div>
@@ -439,23 +463,6 @@ export default function CalendarPage() {
                   )
                 })}
               </div>
-            </div>
-
-            {/* Monthly focus */}
-            <div>
-              <label className="block text-sm font-medium mb-1.5" style={{ color: 'var(--foreground)' }}>
-                Monthly focus <span className="font-normal" style={{ color: 'var(--muted)' }}>(optional)</span>
-              </label>
-              <input
-                type="text"
-                value={framework.monthly_focus}
-                onChange={e => updateFramework({ monthly_focus: e.target.value })}
-                placeholder="e.g. Autumn collection launch, push full suites"
-                className="w-full px-4 py-2.5 rounded-lg text-sm outline-none transition-all"
-                style={{ background: 'var(--background)', border: '1.5px solid var(--border)', color: 'var(--foreground)' }}
-                onFocus={e => (e.target.style.borderColor = 'var(--accent)')}
-                onBlur={e => (e.target.style.borderColor = 'var(--border)')}
-              />
             </div>
 
             {/* Live post count + CTA */}

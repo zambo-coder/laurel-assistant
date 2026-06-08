@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { Project, ContentCalendar } from '@/types'
 import ProjectsClient from './ProjectsClient'
 
 export default async function ProjectsPage() {
@@ -20,12 +21,35 @@ export default async function ProjectsPage() {
     if (t.status === 'done') tasksByProject[t.project_id].done++
   }
 
+  // Collect calendar months to fetch: from content projects + current ± 1 month
+  const today = new Date()
+  const pad = (n: number) => String(n).padStart(2, '0')
+  const thisMonth = `${today.getFullYear()}-${pad(today.getMonth() + 1)}`
+  const prevDate = new Date(today.getFullYear(), today.getMonth() - 1, 1)
+  const prevMonth = `${prevDate.getFullYear()}-${pad(prevDate.getMonth() + 1)}`
+  const nextDate = new Date(today.getFullYear(), today.getMonth() + 1, 1)
+  const nextMonth = `${nextDate.getFullYear()}-${pad(nextDate.getMonth() + 1)}`
+
+  const monthsFromProjects = (projects ?? [])
+    .filter((p: Project) => p.type === 'content' && p.calendar_month_year)
+    .map((p: Project) => p.calendar_month_year as string)
+
+  const monthsToFetch = [...new Set([...monthsFromProjects, prevMonth, thisMonth, nextMonth])]
+
+  const { data: calendarsRaw } = await supabase
+    .from('content_calendar')
+    .select('month_year, days')
+    .in('month_year', monthsToFetch)
+
+  const calendars = (calendarsRaw ?? []) as Pick<ContentCalendar, 'month_year' | 'days'>[]
+
   return (
     <ProjectsClient
       initialProjects={projects ?? []}
       taskCounts={tasksByProject}
       focusAreas={focusAreas ?? []}
       goals={goals ?? []}
+      calendars={calendars}
     />
   )
 }

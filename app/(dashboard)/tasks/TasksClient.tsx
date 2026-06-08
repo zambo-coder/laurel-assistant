@@ -164,7 +164,6 @@ export default function TasksClient({
   const [showAdd, setShowAdd] = useState(false)
   const [newForm, setNewForm] = useState<NewTaskForm>(DEFAULT_FORM)
   const [saving, setSaving] = useState(false)
-  const [editField, setEditField] = useState<{ id: string; field: string } | null>(null)
   const [showCategoryModal, setShowCategoryModal] = useState(false)
   const titleRef = useRef<HTMLInputElement>(null)
 
@@ -371,8 +370,6 @@ export default function TasksClient({
         onClick={() => { setSelectedId(selectedId === task.id ? null : task.id); setSelectedProjectId(null) }}
         onCycleStatus={() => cycleStatus(task)}
         onDelete={() => deleteTask(task.id)}
-        editField={editField}
-        setEditField={setEditField}
         onPatch={patch}
         onOpenProject={task.project_id ? () => setModalProjectId(task.project_id!) : undefined}
       />
@@ -799,15 +796,11 @@ interface RowProps {
   onClick: () => void
   onCycleStatus: () => void
   onDelete: () => void
-  editField: { id: string; field: string } | null
-  setEditField: (v: { id: string; field: string } | null) => void
   onPatch: (id: string, updates: Partial<Task>) => void
   onOpenProject?: () => void
 }
 
-function TaskRow({ task, project, catColor, isSelected, onClick, onCycleStatus, onDelete, editField, setEditField, onPatch, onOpenProject }: RowProps) {
-  const isEditingTitle = editField?.id === task.id && editField.field === 'title'
-  const [titleDraft, setTitleDraft] = useState(task.title)
+function TaskRow({ task, project, catColor, isSelected, onClick, onCycleStatus, onDelete, onPatch, onOpenProject }: RowProps) {
   const [confirming, setConfirming] = useState(false)
 
   const pill = STATUS_PILL[task.status]
@@ -831,27 +824,12 @@ function TaskRow({ task, project, catColor, isSelected, onClick, onCycleStatus, 
       </button>
 
       <div className="flex-1 min-w-0">
-        {isEditingTitle ? (
-          <input
-            value={titleDraft}
-            onChange={e => setTitleDraft(e.target.value)}
-            onBlur={() => { onPatch(task.id, { title: titleDraft }); setEditField(null) }}
-            onKeyDown={e => { if (e.key === 'Enter' || e.key === 'Escape') { onPatch(task.id, { title: titleDraft }); setEditField(null) } }}
-            onClick={e => e.stopPropagation()}
-            autoFocus
-            className="w-full text-sm bg-transparent outline-none"
-            style={{ color: 'var(--foreground)' }}
-          />
-        ) : (
-          <p
-            className={`text-sm leading-tight truncate${task.status === 'done' ? ' line-through opacity-50' : ''}`}
-            style={{ color: 'var(--foreground)' }}
-            onDoubleClick={e => { e.stopPropagation(); setEditField({ id: task.id, field: 'title' }); setTitleDraft(task.title) }}
-            title="Double-click to edit"
-          >
-            {task.title}
-          </p>
-        )}
+        <p
+          className={`text-sm leading-tight truncate${task.status === 'done' ? ' line-through opacity-50' : ''}`}
+          style={{ color: 'var(--foreground)' }}
+        >
+          {task.title}
+        </p>
         <div className="flex items-center gap-2 mt-0.5 flex-wrap">
           {project && (
             <button

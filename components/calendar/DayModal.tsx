@@ -143,7 +143,7 @@ export default function DayModal({ day, monthYear, isProposal, onClose, onSave, 
         const projectRes = await fetch('/api/projects', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ title: projectTitle, type: 'content' }),
+          body: JSON.stringify({ title: projectTitle, type: 'content', calendar_month_year: monthYear, calendar_day: form.day }),
         })
         if (projectRes.ok) {
           const p = await projectRes.json()

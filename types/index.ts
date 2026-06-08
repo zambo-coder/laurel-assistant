@@ -63,6 +63,8 @@ export interface Project {
   due_date?: string
   focus_area_id?: string
   goal_id?: string
+  calendar_month_year?: string
+  calendar_day?: number
   created_at: string
   updated_at: string
 }

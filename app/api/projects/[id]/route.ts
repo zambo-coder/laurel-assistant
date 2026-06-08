@@ -25,7 +25,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   const { id } = await params
   const updates = await req.json()
-  const { title, type, status, due_date, focus_area_id, goal_id } = updates
+  const { title, type, status, due_date, focus_area_id, goal_id, calendar_month_year, calendar_day } = updates
 
   const fields: Record<string, unknown> = { updated_at: new Date().toISOString() }
   if (title !== undefined) fields.title = title
@@ -34,6 +34,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (due_date !== undefined) fields.due_date = due_date
   if (focus_area_id !== undefined) fields.focus_area_id = focus_area_id
   if (goal_id !== undefined) fields.goal_id = goal_id
+  if (calendar_month_year !== undefined) fields.calendar_month_year = calendar_month_year
+  if (calendar_day !== undefined) fields.calendar_day = calendar_day
 
   const { error } = await supabase
     .from('projects')

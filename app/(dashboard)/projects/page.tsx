@@ -5,7 +5,7 @@ export default async function ProjectsPage() {
   const supabase = await createClient()
 
   const [{ data: projects }, { data: tasks }, { data: focusAreas }, { data: goals }] = await Promise.all([
-    supabase.from('projects').select('*').order('created_at', { ascending: false }),
+    supabase.from('projects').select('*').order('due_date', { ascending: true, nullsFirst: false }).order('created_at', { ascending: false }),
     supabase.from('tasks').select('project_id, status'),
     supabase.from('focus_areas').select('id,title').eq('status', 'active').order('title'),
     supabase.from('goals').select('id,title').eq('status', 'active').order('title'),

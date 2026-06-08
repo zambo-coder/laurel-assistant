@@ -60,6 +60,7 @@ export interface Project {
   title: string
   type: 'content' | 'client' | 'general'
   status: 'active' | 'completed' | 'archived'
+  due_date?: string
   focus_area_id?: string
   goal_id?: string
   created_at: string

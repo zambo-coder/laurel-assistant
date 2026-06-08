@@ -71,6 +71,7 @@ export default function ProjectModal({ project, focusAreas, goals, onClose, onUp
           title: form.title,
           type: form.type,
           status: form.status,
+          due_date: form.due_date ?? null,
           focus_area_id: form.focus_area_id ?? null,
           goal_id: form.goal_id ?? null,
         }),
@@ -192,6 +193,20 @@ export default function ProjectModal({ project, focusAreas, goals, onClose, onUp
             <input
               value={form.title}
               onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
+              className={inputClass}
+              style={inputStyle}
+              onFocus={e => (e.target.style.borderColor = 'var(--accent)')}
+              onBlur={e => (e.target.style.borderColor = 'var(--border)')}
+            />
+          </div>
+
+          {/* Due date */}
+          <div>
+            <label className="block text-xs font-semibold uppercase tracking-wide mb-1.5" style={{ color: 'var(--muted)' }}>Due date <span className="font-normal normal-case">(optional)</span></label>
+            <input
+              type="date"
+              value={form.due_date ?? ''}
+              onChange={e => setForm(f => ({ ...f, due_date: e.target.value || undefined }))}
               className={inputClass}
               style={inputStyle}
               onFocus={e => (e.target.style.borderColor = 'var(--accent)')}

@@ -117,6 +117,13 @@ export default function ProjectsClient({ initialProjects, taskCounts, focusAreas
         {/* Title */}
         <h3 className="text-sm font-semibold leading-tight mb-2" style={{ color: 'var(--foreground)' }}>{project.title}</h3>
 
+        {/* Due date */}
+        {project.due_date && (
+          <p className="text-[11px] mb-1.5" style={{ color: new Date(project.due_date + 'T00:00:00') < new Date() && project.status === 'active' ? '#c07a6a' : 'var(--muted)' }}>
+            Due {new Date(project.due_date + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+          </p>
+        )}
+
         {/* Focus area + goal */}
         {(focusArea || goal) && (
           <div className="mb-3 space-y-0.5">

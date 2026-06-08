@@ -1,9 +1,10 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { CalendarDay, Task } from '@/types'
+import { CalendarDay, Task, Project, FocusArea, Goal } from '@/types'
 import Button from '@/components/ui/Button'
 import Link from 'next/link'
+import ProjectModal from '@/components/projects/ProjectModal'
 import toast from 'react-hot-toast'
 
 const TASK_STATUS_ICON: Record<string, string> = { todo: '○', in_progress: '◐', done: '✓' }
@@ -48,6 +49,10 @@ export default function DayModal({ day, monthYear, isProposal, onClose, onSave, 
   const [addingTasks, setAddingTasks] = useState(false)
   const [linkedTasks, setLinkedTasks] = useState<Task[]>([])
   const [tasksLoading, setTasksLoading] = useState(false)
+  const [linkedProject, setLinkedProject] = useState<Project | null>(null)
+  const [focusAreas, setFocusAreas] = useState<Pick<FocusArea, 'id' | 'title'>[]>([])
+  const [goals, setGoals] = useState<Pick<Goal, 'id' | 'title'>[]>([])
+  const [showProjectModal, setShowProjectModal] = useState(false)
 
   // Close on Escape
   useEffect(() => {
@@ -56,12 +61,26 @@ export default function DayModal({ day, monthYear, isProposal, onClose, onSave, 
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
 
-  // Load tasks linked to this day
+  // Load tasks linked to this day, then fetch the project if any
   useEffect(() => {
     setTasksLoading(true)
     fetch(`/api/tasks?month_year=${monthYear}&calendar_day=${day.day}`)
       .then(r => r.json())
-      .then(data => setLinkedTasks(Array.isArray(data) ? data : []))
+      .then(async (data: Task[]) => {
+        const tasks = Array.isArray(data) ? data : []
+        setLinkedTasks(tasks)
+        const projectId = tasks.find(t => t.project_id)?.project_id
+        if (projectId) {
+          const [projRes, faRes, gRes] = await Promise.all([
+            fetch(`/api/projects/${projectId}`).then(r => r.json()).catch(() => null),
+            fetch('/api/focus-areas').then(r => r.json()).catch(() => []),
+            fetch('/api/goals').then(r => r.json()).catch(() => []),
+          ])
+          if (projRes?.id) setLinkedProject(projRes)
+          setFocusAreas(Array.isArray(faRes) ? faRes : [])
+          setGoals(Array.isArray(gRes) ? gRes : [])
+        }
+      })
       .catch(() => {})
       .finally(() => setTasksLoading(false))
   }, [monthYear, day.day])
@@ -313,7 +332,18 @@ export default function DayModal({ day, monthYear, isProposal, onClose, onSave, 
           <div className="pt-1" style={{ borderTop: '1px solid var(--border)' }}>
             <div className="flex items-center justify-between mb-3 pt-4">
               <div>
-                <p className="text-sm font-medium" style={{ color: 'var(--foreground)' }}>Production tasks</p>
+                <p className="text-sm font-medium" style={{ color: 'var(--foreground)' }}>
+                  Production tasks
+                  {linkedProject && (
+                    <button
+                      onClick={() => setShowProjectModal(true)}
+                      className="ml-2 text-[10px] px-2 py-0.5 rounded-full underline underline-offset-2 hover:opacity-70 transition-opacity"
+                      style={{ color: 'var(--muted)', background: 'var(--border)' }}
+                    >
+                      {linkedProject.title} →
+                    </button>
+                  )}
+                </p>
                 <p className="text-xs" style={{ color: 'var(--muted)' }}>Tasks linked to this post</p>
               </div>
               <Button variant="secondary" size="sm" onClick={generateTasks} loading={generatingTasks}>
@@ -393,6 +423,18 @@ export default function DayModal({ day, monthYear, isProposal, onClose, onSave, 
           <Button onClick={save} loading={saving}>Save</Button>
         </div>
       </div>
+
+      {/* Project modal — stacked on top when project link is clicked */}
+      {showProjectModal && linkedProject && (
+        <ProjectModal
+          project={linkedProject}
+          focusAreas={focusAreas}
+          goals={goals}
+          onClose={() => setShowProjectModal(false)}
+          onUpdate={updated => { setLinkedProject(updated); setShowProjectModal(false) }}
+          onDelete={() => { setLinkedProject(null); setShowProjectModal(false) }}
+        />
+      )}
     </div>
   )
 }

@@ -4,6 +4,7 @@ import React, { useState, useRef, useEffect, useMemo, ReactNode } from 'react'
 import { Task, Project, FocusArea, Goal } from '@/types'
 import Button from '@/components/ui/Button'
 import PageHeader from '@/components/ui/PageHeader'
+import ProjectModal from '@/components/projects/ProjectModal'
 import toast from 'react-hot-toast'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -159,6 +160,7 @@ export default function TasksClient({
   // Selection & UI state
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null)
+  const [modalProjectId, setModalProjectId] = useState<string | null>(null)
   const [showAdd, setShowAdd] = useState(false)
   const [newForm, setNewForm] = useState<NewTaskForm>(DEFAULT_FORM)
   const [saving, setSaving] = useState(false)
@@ -372,6 +374,7 @@ export default function TasksClient({
         editField={editField}
         setEditField={setEditField}
         onPatch={patch}
+        onOpenProject={task.project_id ? () => setModalProjectId(task.project_id!) : undefined}
       />
     )
   }
@@ -545,6 +548,7 @@ export default function TasksClient({
                     onSelect={() => { setSelectedId(selectedId === task.id ? null : task.id); setSelectedProjectId(null) }}
                     onCycleStatus={() => cycleStatus(task)}
                     onDelete={() => deleteTask(task.id)}
+                    onOpenProject={task.project_id ? () => setModalProjectId(task.project_id!) : undefined}
                   />
                 ))}
               </React.Fragment>
@@ -753,6 +757,22 @@ export default function TasksClient({
           onClose={() => setShowCategoryModal(false)}
         />
       )}
+
+      {/* Project modal (opened by clicking project name in task rows) */}
+      {modalProjectId && (() => {
+        const mp = projects.find(p => p.id === modalProjectId)
+        if (!mp) return null
+        return (
+          <ProjectModal
+            project={mp}
+            focusAreas={focusAreas}
+            goals={goals}
+            onClose={() => setModalProjectId(null)}
+            onUpdate={updated => { patchProject(updated.id, updated); setModalProjectId(null) }}
+            onDelete={id => { deleteProject(id); setModalProjectId(null) }}
+          />
+        )
+      })()}
     </div>
   )
 }
@@ -782,9 +802,10 @@ interface RowProps {
   editField: { id: string; field: string } | null
   setEditField: (v: { id: string; field: string } | null) => void
   onPatch: (id: string, updates: Partial<Task>) => void
+  onOpenProject?: () => void
 }
 
-function TaskRow({ task, project, catColor, isSelected, onClick, onCycleStatus, onDelete, editField, setEditField, onPatch }: RowProps) {
+function TaskRow({ task, project, catColor, isSelected, onClick, onCycleStatus, onDelete, editField, setEditField, onPatch, onOpenProject }: RowProps) {
   const isEditingTitle = editField?.id === task.id && editField.field === 'title'
   const [titleDraft, setTitleDraft] = useState(task.title)
   const [confirming, setConfirming] = useState(false)
@@ -833,9 +854,13 @@ function TaskRow({ task, project, catColor, isSelected, onClick, onCycleStatus, 
         )}
         <div className="flex items-center gap-2 mt-0.5 flex-wrap">
           {project && (
-            <span className="text-[10px] font-medium truncate max-w-[120px]" style={{ color: TYPE_COLORS[project.type] ?? '#9e9e9e' }}>
+            <button
+              onClick={e => { if (onOpenProject) { e.stopPropagation(); onOpenProject() } }}
+              className="text-[10px] font-medium truncate max-w-[120px] text-left underline underline-offset-2 hover:opacity-70 transition-opacity"
+              style={{ color: TYPE_COLORS[project.type] ?? '#9e9e9e' }}
+            >
               {project.title}
-            </span>
+            </button>
           )}
           {task.category && task.category !== 'general' && (
             <span className="text-[10px] font-medium capitalize" style={{ color: catColor(task.category) }}>{task.category}</span>
@@ -872,7 +897,7 @@ function TaskRow({ task, project, catColor, isSelected, onClick, onCycleStatus, 
 
 // ─── Task Table Row ───────────────────────────────────────────────────────────
 
-function TaskTableRow({ task, visibleCols, showProject, showFocusArea, project, focusArea, catColor, isSelected, onSelect, onCycleStatus, onDelete }: {
+function TaskTableRow({ task, visibleCols, showProject, showFocusArea, project, focusArea, catColor, isSelected, onSelect, onCycleStatus, onDelete, onOpenProject }: {
   task: Task
   visibleCols: Set<string>
   showProject: boolean
@@ -884,6 +909,7 @@ function TaskTableRow({ task, visibleCols, showProject, showFocusArea, project, 
   onSelect: () => void
   onCycleStatus: () => void
   onDelete: () => void
+  onOpenProject?: () => void
 }) {
   const [confirming, setConfirming] = useState(false)
   const pill = STATUS_PILL[task.status]
@@ -942,9 +968,12 @@ function TaskTableRow({ task, visibleCols, showProject, showFocusArea, project, 
         </td>
       )}
       {visibleCols.has('project') && showProject && (
-        <td style={tdStyle}>
+        <td style={tdStyle} onClick={e => { if (onOpenProject) { e.stopPropagation(); onOpenProject() } }}>
           {project ? (
-            <span className="text-xs truncate max-w-[120px] inline-block" style={{ color: TYPE_COLORS[project.type] ?? '#9e9e9e' }}>{project.title}</span>
+            <span
+              className={`text-xs truncate max-w-[120px] inline-block${onOpenProject ? ' underline underline-offset-2 cursor-pointer hover:opacity-70' : ''}`}
+              style={{ color: TYPE_COLORS[project.type] ?? '#9e9e9e' }}
+            >{project.title}</span>
           ) : <span className="text-xs" style={{ color: 'var(--border)' }}>—</span>}
         </td>
       )}

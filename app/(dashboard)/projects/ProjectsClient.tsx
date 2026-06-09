@@ -42,7 +42,7 @@ export default function ProjectsClient({ initialProjects, taskCounts, focusAreas
   const [selectedProject, setSelectedProject] = useState<Project | null>(null)
   const [showCreate, setShowCreate] = useState(false)
   const [counts, setCounts] = useState(taskCounts)
-  const [creatingUntrackedFor, setCreatingUntrackedFor] = useState<string | null>(null) // key = `${month_year}:${day}`
+  const [openingEntry, setOpeningEntry] = useState<string | null>(null) // key = `${month_year}:${day}`
 
   // Create form state
   const [newTitle, setNewTitle] = useState('')
@@ -82,9 +82,10 @@ export default function ProjectsClient({ initialProjects, taskCounts, focusAreas
     }
   }
 
-  async function addTasksForUntracked(entry: CalendarEntry) {
+  // For untracked calendar entries: create a project then open the modal
+  async function openUntrackedEntry(entry: CalendarEntry) {
     const key = `${entry.month_year}:${entry.day.day}`
-    setCreatingUntrackedFor(key)
+    setOpeningEntry(key)
     try {
       const title = entry.day.theme?.trim() || `${entry.month_year} Day ${entry.day.day}`
       const res = await fetch('/api/projects', {
@@ -105,7 +106,7 @@ export default function ProjectsClient({ initialProjects, taskCounts, focusAreas
     } catch {
       toast.error('Could not create project')
     } finally {
-      setCreatingUntrackedFor(null)
+      setOpeningEntry(null)
     }
   }
 
@@ -120,9 +121,8 @@ export default function ProjectsClient({ initialProjects, taskCounts, focusAreas
 
   // ── Build content section entries ───────────────────────────────────────────
 
-  // Flatten all calendar days from all fetched months
-  const contentEntries: CalendarEntry[] = []
   const sortedCalendars = [...calendars].sort((a, b) => a.month_year.localeCompare(b.month_year))
+  const contentEntries: CalendarEntry[] = []
   for (const cal of sortedCalendars) {
     const sortedDays = [...(cal.days ?? [])].sort((a, b) => a.day - b.day)
     for (const day of sortedDays) {
@@ -135,15 +135,6 @@ export default function ProjectsClient({ initialProjects, taskCounts, focusAreas
     }
   }
 
-  // Content projects with no matching calendar entry (fallback — show in Projects section)
-  const unmatchedContentProjects = projects.filter(p =>
-    p.type === 'content' &&
-    (!p.calendar_month_year || !contentEntries.some(e => e.project?.id === p.id))
-  )
-
-  // Non-content projects
-  const otherProjects = projects.filter(p => p.type !== 'content')
-
   // Group content entries by month
   const contentByMonth = new Map<string, CalendarEntry[]>()
   for (const entry of contentEntries) {
@@ -151,10 +142,17 @@ export default function ProjectsClient({ initialProjects, taskCounts, focusAreas
     contentByMonth.get(entry.month_year)!.push(entry)
   }
 
-  const hasContent = contentEntries.length > 0 || unmatchedContentProjects.length > 0
-  const hasProjects = otherProjects.length > 0
+  // Non-calendar projects: client/general + content without calendar fields (old data)
+  const generalProjects = projects.filter(p =>
+    p.type !== 'content' || !p.calendar_month_year
+  )
+  const activeGeneralProjects = generalProjects.filter(p => p.status === 'active')
+  const otherGeneralProjects = generalProjects.filter(p => p.status !== 'active')
 
-  // ── Card renderers ───────────────────────────────────────────────────────────
+  const hasContent = contentEntries.length > 0
+  const hasGeneral = generalProjects.length > 0
+
+  // ── Helpers ──────────────────────────────────────────────────────────────────
 
   function formatShortDate(monthYear: string, day: number) {
     const [yr, mo] = monthYear.split('-')
@@ -162,20 +160,42 @@ export default function ProjectsClient({ initialProjects, taskCounts, focusAreas
       .toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
   }
 
-  function renderTrackedContentCard(entry: CalendarEntry) {
+  function monthLabel(monthYear: string) {
+    const [yr, mo] = monthYear.split('-')
+    return new Date(Number(yr), Number(mo) - 1, 1)
+      .toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })
+  }
+
+  // ── Unified content card ─────────────────────────────────────────────────────
+
+  function renderContentCard(entry: CalendarEntry) {
     const { project, day, month_year } = entry
-    if (!project) return null
-    const count = counts[project.id]
+    const key = `${month_year}:${day.day}`
+    const isOpening = openingEntry === key
+    const count = project ? counts[project.id] : undefined
     const progress = count && count.total > 0 ? Math.round((count.done / count.total) * 100) : null
+
+    function handleClick() {
+      if (isOpening) return
+      if (project) {
+        setSelectedProject(project)
+      } else {
+        openUntrackedEntry(entry)
+      }
+    }
 
     return (
       <div
-        key={project.id}
+        key={project?.id ?? key}
         className="rounded-xl p-4 cursor-pointer transition-all hover:shadow-md"
-        style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}
-        onClick={() => setSelectedProject(project)}
+        style={{
+          background: 'var(--surface)',
+          border: '1px solid var(--border)',
+          opacity: isOpening ? 0.6 : 1,
+        }}
+        onClick={handleClick}
       >
-        {/* Format + date + status row */}
+        {/* Format + date + production status row */}
         <div className="flex items-center gap-1.5 mb-2 flex-wrap">
           <span
             className="text-[10px] px-2 py-0.5 rounded-full font-semibold uppercase tracking-wider"
@@ -197,11 +217,15 @@ export default function ProjectsClient({ initialProjects, taskCounts, focusAreas
         </div>
 
         {/* Theme */}
-        <h3 className="text-sm font-semibold leading-tight mb-1.5" style={{ color: 'var(--foreground)' }}>{day.theme}</h3>
+        <h3 className="text-sm font-semibold leading-tight mb-1.5" style={{ color: 'var(--foreground)' }}>
+          {day.theme}
+        </h3>
 
         {/* Post idea */}
         {day.post_idea && (
-          <p className="text-[11px] leading-snug mb-3 line-clamp-2" style={{ color: 'var(--muted)' }}>{day.post_idea}</p>
+          <p className="text-[11px] leading-snug mb-3 line-clamp-2" style={{ color: 'var(--muted)' }}>
+            {day.post_idea}
+          </p>
         )}
 
         {/* Task progress */}
@@ -219,52 +243,15 @@ export default function ProjectsClient({ initialProjects, taskCounts, focusAreas
             </div>
           </div>
         ) : (
-          <p className="text-[10px]" style={{ color: 'var(--muted)' }}>No tasks yet</p>
+          <p className="text-[10px]" style={{ color: 'var(--muted)' }}>
+            {isOpening ? 'Opening…' : 'No tasks yet'}
+          </p>
         )}
       </div>
     )
   }
 
-  function renderUntrackedContentCard(entry: CalendarEntry) {
-    const { day, month_year } = entry
-    const key = `${month_year}:${day.day}`
-    const isCreating = creatingUntrackedFor === key
-
-    return (
-      <div
-        key={key}
-        className="rounded-xl p-4"
-        style={{ background: 'var(--surface)', border: '1px dashed var(--border)', opacity: 0.75 }}
-      >
-        <div className="flex items-center gap-1.5 mb-2 flex-wrap">
-          <span
-            className="text-[10px] px-2 py-0.5 rounded-full font-semibold uppercase tracking-wider"
-            style={{ background: FORMAT_COLORS[day.format], color: 'var(--foreground)' }}
-          >
-            {day.format}
-          </span>
-          <span className="text-[10px]" style={{ color: 'var(--muted)' }}>
-            {formatShortDate(month_year, day.day)}
-          </span>
-        </div>
-
-        <h3 className="text-sm font-semibold leading-tight mb-1.5" style={{ color: 'var(--foreground)' }}>{day.theme}</h3>
-
-        {day.post_idea && (
-          <p className="text-[11px] leading-snug mb-3 line-clamp-2" style={{ color: 'var(--muted)' }}>{day.post_idea}</p>
-        )}
-
-        <button
-          onClick={() => addTasksForUntracked(entry)}
-          disabled={isCreating}
-          className="text-[11px] px-2.5 py-1 rounded-lg font-medium transition-all hover:opacity-80 disabled:opacity-50"
-          style={{ background: 'var(--foreground)', color: 'var(--background)' }}
-        >
-          {isCreating ? 'Creating…' : 'Add tasks →'}
-        </button>
-      </div>
-    )
-  }
+  // ── General project card ─────────────────────────────────────────────────────
 
   function renderProjectCard(project: Project) {
     const count = counts[project.id]
@@ -279,7 +266,6 @@ export default function ProjectsClient({ initialProjects, taskCounts, focusAreas
         style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}
         onClick={() => setSelectedProject(project)}
       >
-        {/* Type + status row */}
         <div className="flex items-center justify-between mb-2.5">
           <span
             className="text-[10px] px-2 py-0.5 rounded-full font-medium capitalize"
@@ -325,11 +311,6 @@ export default function ProjectsClient({ initialProjects, taskCounts, focusAreas
         )}
       </div>
     )
-  }
-
-  function monthLabel(monthYear: string) {
-    const [yr, mo] = monthYear.split('-')
-    return new Date(Number(yr), Number(mo) - 1, 1).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })
   }
 
   // ── Main render ──────────────────────────────────────────────────────────────
@@ -405,7 +386,7 @@ export default function ProjectsClient({ initialProjects, taskCounts, focusAreas
         </div>
       )}
 
-      {!hasContent && !hasProjects ? (
+      {!hasContent && !hasGeneral ? (
         <div className="text-center py-16">
           <p className="text-sm font-medium mb-1" style={{ color: 'var(--foreground)' }}>No content or projects yet</p>
           <p className="text-xs mb-4" style={{ color: 'var(--muted)' }}>Generate a content calendar or create your first project.</p>
@@ -413,57 +394,43 @@ export default function ProjectsClient({ initialProjects, taskCounts, focusAreas
         </div>
       ) : (
         <div className="space-y-10">
+
           {/* ── Content section ── */}
           {hasContent && (
             <section>
               <p className="text-xs font-semibold uppercase tracking-widest mb-4" style={{ color: 'var(--muted)' }}>
-                Content <span className="font-normal normal-case">({contentEntries.length} post{contentEntries.length !== 1 ? 's' : ''}{unmatchedContentProjects.length > 0 ? ` + ${unmatchedContentProjects.length} unlinked` : ''})</span>
+                Content <span className="font-normal normal-case">({contentEntries.length} post{contentEntries.length !== 1 ? 's' : ''})</span>
               </p>
 
-              {/* Group by month */}
               {Array.from(contentByMonth.entries()).map(([monthYear, entries]) => (
                 <div key={monthYear} className="mb-6">
                   <p className="text-xs font-medium mb-3" style={{ color: 'var(--muted)' }}>{monthLabel(monthYear)}</p>
                   <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                    {entries.map(entry =>
-                      entry.project
-                        ? renderTrackedContentCard(entry)
-                        : renderUntrackedContentCard(entry)
-                    )}
+                    {entries.map(entry => renderContentCard(entry))}
                   </div>
                 </div>
               ))}
-
-              {/* Unmatched content projects fallback */}
-              {unmatchedContentProjects.length > 0 && (
-                <div className="mb-6">
-                  <p className="text-xs font-medium mb-3" style={{ color: 'var(--muted)' }}>Unlinked content projects</p>
-                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                    {unmatchedContentProjects.map(renderProjectCard)}
-                  </div>
-                </div>
-              )}
             </section>
           )}
 
-          {/* ── Projects section ── */}
-          {hasProjects && (
+          {/* ── General / client projects section ── */}
+          {hasGeneral && (
             <section>
               <p className="text-xs font-semibold uppercase tracking-widest mb-4" style={{ color: 'var(--muted)' }}>
-                Projects <span className="font-normal normal-case">({otherProjects.filter(p => p.status === 'active').length} active)</span>
+                Projects <span className="font-normal normal-case">({activeGeneralProjects.length} active)</span>
               </p>
 
-              {otherProjects.filter(p => p.status === 'active').length > 0 && (
+              {activeGeneralProjects.length > 0 && (
                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 mb-6">
-                  {otherProjects.filter(p => p.status === 'active').map(renderProjectCard)}
+                  {activeGeneralProjects.map(renderProjectCard)}
                 </div>
               )}
 
-              {otherProjects.filter(p => p.status !== 'active').length > 0 && (
+              {otherGeneralProjects.length > 0 && (
                 <>
                   <p className="text-xs font-medium mb-3" style={{ color: 'var(--muted)' }}>Completed / Archived</p>
                   <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                    {otherProjects.filter(p => p.status !== 'active').map(renderProjectCard)}
+                    {otherGeneralProjects.map(renderProjectCard)}
                   </div>
                 </>
               )}

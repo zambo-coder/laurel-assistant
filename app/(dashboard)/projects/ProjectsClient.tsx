@@ -16,14 +16,17 @@ const PROD_STATUS_COLORS: Record<string, string> = {
 const TYPE_COLORS: Record<string, string> = {
   content: '#5a8fbe', client: '#7a9478', general: '#c4a06a',
 }
-const STATUS_COLORS: Record<Project['status'], string> = {
-  active: '#7a9478', completed: '#5a8fbe', archived: '#9e9e9e',
-}
 
 interface CalendarEntry {
   month_year: string
   day: CalendarDay
   project?: Project
+}
+
+interface MonthGroup {
+  monthYear: string
+  calendarEntries: CalendarEntry[]
+  projects: Project[]
 }
 
 interface Props {
@@ -42,17 +45,24 @@ export default function ProjectsClient({ initialProjects, taskCounts, focusAreas
   const [selectedProject, setSelectedProject] = useState<Project | null>(null)
   const [showCreate, setShowCreate] = useState(false)
   const [counts, setCounts] = useState(taskCounts)
-  const [openingEntry, setOpeningEntry] = useState<string | null>(null) // key = `${month_year}:${day}`
+  const [openingEntry, setOpeningEntry] = useState<string | null>(null)
+  // Suppress calendar entries whose projects were deleted this session
+  const [deletedCalendarKeys, setDeletedCalendarKeys] = useState<Set<string>>(new Set())
 
   // Create form state
   const [newTitle, setNewTitle] = useState('')
   const [newType, setNewType] = useState<Project['type']>('general')
+  const [newDueDate, setNewDueDate] = useState('')
   const [newFocusAreaId, setNewFocusAreaId] = useState('')
   const [newGoalId, setNewGoalId] = useState('')
   const [creating, setCreating] = useState(false)
 
   async function createProject() {
     if (!newTitle.trim()) return
+    if (newType !== 'content' && !newDueDate) {
+      toast.error('Please set a due date')
+      return
+    }
     setCreating(true)
     try {
       const res = await fetch('/api/projects', {
@@ -61,6 +71,7 @@ export default function ProjectsClient({ initialProjects, taskCounts, focusAreas
         body: JSON.stringify({
           title: newTitle.trim(),
           type: newType,
+          due_date: newDueDate || null,
           focus_area_id: newFocusAreaId || null,
           goal_id: newGoalId || null,
         }),
@@ -71,6 +82,7 @@ export default function ProjectsClient({ initialProjects, taskCounts, focusAreas
       setCounts(prev => ({ ...prev, [created.id]: { total: 0, done: 0 } }))
       setNewTitle('')
       setNewType('general')
+      setNewDueDate('')
       setNewFocusAreaId('')
       setNewGoalId('')
       setShowCreate(false)
@@ -82,7 +94,6 @@ export default function ProjectsClient({ initialProjects, taskCounts, focusAreas
     }
   }
 
-  // For untracked calendar entries: create a project then open the modal
   async function openUntrackedEntry(entry: CalendarEntry) {
     const key = `${entry.month_year}:${entry.day.day}`
     setOpeningEntry(key)
@@ -115,17 +126,23 @@ export default function ProjectsClient({ initialProjects, taskCounts, focusAreas
   }
 
   function handleDelete(id: string) {
+    const deleted = projects.find(p => p.id === id)
     setProjects(prev => prev.filter(p => p.id !== id))
     setCounts(prev => { const n = { ...prev }; delete n[id]; return n })
+    if (deleted?.calendar_month_year && deleted.calendar_day != null) {
+      const key = `${deleted.calendar_month_year}:${deleted.calendar_day}`
+      setDeletedCalendarKeys(prev => new Set([...prev, key]))
+    }
   }
 
-  // ── Build content section entries ───────────────────────────────────────────
+  // ── Build month groups ───────────────────────────────────────────────────────
 
-  const sortedCalendars = [...calendars].sort((a, b) => a.month_year.localeCompare(b.month_year))
+  // Calendar entries (content posts from fetched calendars)
   const contentEntries: CalendarEntry[] = []
-  for (const cal of sortedCalendars) {
-    const sortedDays = [...(cal.days ?? [])].sort((a, b) => a.day - b.day)
-    for (const day of sortedDays) {
+  for (const cal of [...calendars].sort((a, b) => a.month_year.localeCompare(b.month_year))) {
+    for (const day of [...(cal.days ?? [])].sort((a, b) => a.day - b.day)) {
+      const key = `${cal.month_year}:${day.day}`
+      if (deletedCalendarKeys.has(key)) continue
       const project = projects.find(p =>
         p.type === 'content' &&
         p.calendar_month_year === cal.month_year &&
@@ -135,22 +152,40 @@ export default function ProjectsClient({ initialProjects, taskCounts, focusAreas
     }
   }
 
-  // Group content entries by month
-  const contentByMonth = new Map<string, CalendarEntry[]>()
-  for (const entry of contentEntries) {
-    if (!contentByMonth.has(entry.month_year)) contentByMonth.set(entry.month_year, [])
-    contentByMonth.get(entry.month_year)!.push(entry)
-  }
-
-  // Non-calendar projects: client/general + content without calendar fields (old data)
-  const generalProjects = projects.filter(p =>
+  // Standalone projects: general/client + content without calendar fields
+  const standaloneProjects = projects.filter(p =>
     p.type !== 'content' || !p.calendar_month_year
   )
-  const activeGeneralProjects = generalProjects.filter(p => p.status === 'active')
-  const otherGeneralProjects = generalProjects.filter(p => p.status !== 'active')
 
-  const hasContent = contentEntries.length > 0
-  const hasGeneral = generalProjects.length > 0
+  // Merge into month groups
+  const groupMap = new Map<string, MonthGroup>()
+
+  for (const entry of contentEntries) {
+    if (!groupMap.has(entry.month_year)) {
+      groupMap.set(entry.month_year, { monthYear: entry.month_year, calendarEntries: [], projects: [] })
+    }
+    groupMap.get(entry.month_year)!.calendarEntries.push(entry)
+  }
+
+  for (const project of standaloneProjects) {
+    const monthYear = project.due_date
+      ? project.due_date.slice(0, 7)
+      : '__unplanned'
+    if (!groupMap.has(monthYear)) {
+      groupMap.set(monthYear, { monthYear, calendarEntries: [], projects: [] })
+    }
+    groupMap.get(monthYear)!.projects.push(project)
+  }
+
+  const sortedGroups = [...groupMap.entries()]
+    .sort(([a], [b]) => {
+      if (a === '__unplanned') return 1
+      if (b === '__unplanned') return -1
+      return a.localeCompare(b)
+    })
+    .map(([, g]) => g)
+
+  const isEmpty = sortedGroups.length === 0
 
   // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -161,12 +196,13 @@ export default function ProjectsClient({ initialProjects, taskCounts, focusAreas
   }
 
   function monthLabel(monthYear: string) {
+    if (monthYear === '__unplanned') return 'No date'
     const [yr, mo] = monthYear.split('-')
     return new Date(Number(yr), Number(mo) - 1, 1)
       .toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })
   }
 
-  // ── Unified content card ─────────────────────────────────────────────────────
+  // ── Content (calendar) card ──────────────────────────────────────────────────
 
   function renderContentCard(entry: CalendarEntry) {
     const { project, day, month_year } = entry
@@ -175,27 +211,17 @@ export default function ProjectsClient({ initialProjects, taskCounts, focusAreas
     const count = project ? counts[project.id] : undefined
     const progress = count && count.total > 0 ? Math.round((count.done / count.total) * 100) : null
 
-    function handleClick() {
-      if (isOpening) return
-      if (project) {
-        setSelectedProject(project)
-      } else {
-        openUntrackedEntry(entry)
-      }
-    }
-
     return (
       <div
         key={project?.id ?? key}
         className="rounded-xl p-4 cursor-pointer transition-all hover:shadow-md"
-        style={{
-          background: 'var(--surface)',
-          border: '1px solid var(--border)',
-          opacity: isOpening ? 0.6 : 1,
+        style={{ background: 'var(--surface)', border: '1px solid var(--border)', opacity: isOpening ? 0.6 : 1 }}
+        onClick={() => {
+          if (isOpening) return
+          if (project) setSelectedProject(project)
+          else openUntrackedEntry(entry)
         }}
-        onClick={handleClick}
       >
-        {/* Format + date + production status row */}
         <div className="flex items-center gap-1.5 mb-2 flex-wrap">
           <span
             className="text-[10px] px-2 py-0.5 rounded-full font-semibold uppercase tracking-wider"
@@ -216,19 +242,16 @@ export default function ProjectsClient({ initialProjects, taskCounts, focusAreas
           )}
         </div>
 
-        {/* Theme */}
         <h3 className="text-sm font-semibold leading-tight mb-1.5" style={{ color: 'var(--foreground)' }}>
           {day.theme}
         </h3>
 
-        {/* Post idea */}
         {day.post_idea && (
           <p className="text-[11px] leading-snug mb-3 line-clamp-2" style={{ color: 'var(--muted)' }}>
             {day.post_idea}
           </p>
         )}
 
-        {/* Task progress */}
         {count && count.total > 0 ? (
           <div>
             <div className="flex items-center justify-between mb-1">
@@ -251,13 +274,15 @@ export default function ProjectsClient({ initialProjects, taskCounts, focusAreas
     )
   }
 
-  // ── General project card ─────────────────────────────────────────────────────
+  // ── Standalone project card ──────────────────────────────────────────────────
 
   function renderProjectCard(project: Project) {
     const count = counts[project.id]
     const focusArea = focusAreas.find(f => f.id === project.focus_area_id)
     const goal = goals.find(g => g.id === project.goal_id)
     const progress = count && count.total > 0 ? Math.round((count.done / count.total) * 100) : null
+    const isOverdue = project.due_date && project.status === 'active' &&
+      new Date(project.due_date + 'T00:00:00') < new Date()
 
     return (
       <div
@@ -266,28 +291,29 @@ export default function ProjectsClient({ initialProjects, taskCounts, focusAreas
         style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}
         onClick={() => setSelectedProject(project)}
       >
-        <div className="flex items-center justify-between mb-2.5">
+        <div className="flex items-center gap-1.5 mb-2 flex-wrap">
           <span
             className="text-[10px] px-2 py-0.5 rounded-full font-medium capitalize"
             style={{ background: (TYPE_COLORS[project.type] ?? 'var(--muted)') + '20', color: TYPE_COLORS[project.type] ?? 'var(--muted)' }}
           >
             {project.type}
           </span>
+          {project.due_date && (
+            <span className="text-[10px]" style={{ color: isOverdue ? '#c07a6a' : 'var(--muted)' }}>
+              {isOverdue ? '⚠ ' : ''}
+              {new Date(project.due_date + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+            </span>
+          )}
           <span
-            className="text-[10px] px-2 py-0.5 rounded-full font-medium capitalize"
-            style={{ background: STATUS_COLORS[project.status] + '20', color: STATUS_COLORS[project.status] }}
+            className="text-[10px] px-2 py-0.5 rounded-full font-medium capitalize ml-auto"
+            style={{ background: project.status === 'active' ? '#7a947820' : project.status === 'completed' ? '#5a8fbe20' : '#9e9e9e20',
+                     color: project.status === 'active' ? '#7a9478' : project.status === 'completed' ? '#5a8fbe' : '#9e9e9e' }}
           >
             {project.status}
           </span>
         </div>
 
         <h3 className="text-sm font-semibold leading-tight mb-2" style={{ color: 'var(--foreground)' }}>{project.title}</h3>
-
-        {project.due_date && (
-          <p className="text-[11px] mb-1.5" style={{ color: new Date(project.due_date + 'T00:00:00') < new Date() && project.status === 'active' ? '#c07a6a' : 'var(--muted)' }}>
-            Due {new Date(project.due_date + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
-          </p>
-        )}
 
         {(focusArea || goal) && (
           <div className="mb-3 space-y-0.5">
@@ -303,7 +329,8 @@ export default function ProjectsClient({ initialProjects, taskCounts, focusAreas
               <span className="text-[10px] font-medium" style={{ color: 'var(--foreground)' }}>{progress}%</span>
             </div>
             <div className="h-1 rounded-full overflow-hidden" style={{ background: 'var(--border)' }}>
-              <div className="h-full rounded-full transition-all" style={{ width: `${progress}%`, background: progress === 100 ? '#7a9478' : 'var(--foreground)' }} />
+              <div className="h-full rounded-full transition-all"
+                style={{ width: `${progress}%`, background: progress === 100 ? '#7a9478' : 'var(--foreground)' }} />
             </div>
           </div>
         ) : (
@@ -319,7 +346,7 @@ export default function ProjectsClient({ initialProjects, taskCounts, focusAreas
     <div>
       <PageHeader
         title="Projects"
-        description="Content posts and work projects in one place"
+        description="Everything planned, organised by month"
         action={
           <Button size="sm" onClick={() => setShowCreate(v => !v)}>
             {showCreate ? 'Cancel' : '+ New project'}
@@ -343,99 +370,71 @@ export default function ProjectsClient({ initialProjects, taskCounts, focusAreas
               onKeyDown={e => { if (e.key === 'Enter') createProject() }}
               autoFocus
             />
-            <div className="grid grid-cols-3 gap-3">
-              <select
-                value={newType}
-                onChange={e => setNewType(e.target.value as Project['type'])}
-                className={inputClass}
-                style={inputStyle}
-              >
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <select value={newType} onChange={e => setNewType(e.target.value as Project['type'])} className={inputClass} style={inputStyle}>
                 <option value="general">General</option>
-                <option value="content">Content</option>
                 <option value="client">Client</option>
+                <option value="content">Content</option>
               </select>
+              <input
+                type="date"
+                value={newDueDate}
+                onChange={e => setNewDueDate(e.target.value)}
+                className={inputClass}
+                style={{ ...inputStyle, borderColor: !newDueDate && newType !== 'content' ? '#c07a6a60' : 'var(--border)' }}
+                onFocus={e => (e.target.style.borderColor = 'var(--accent)')}
+                onBlur={e => (e.target.style.borderColor = !newDueDate && newType !== 'content' ? '#c07a6a60' : 'var(--border)')}
+                title={newType !== 'content' ? 'Required' : 'Optional'}
+              />
               {focusAreas.length > 0 && (
-                <select
-                  value={newFocusAreaId}
-                  onChange={e => setNewFocusAreaId(e.target.value)}
-                  className={inputClass}
-                  style={inputStyle}
-                >
+                <select value={newFocusAreaId} onChange={e => setNewFocusAreaId(e.target.value)} className={inputClass} style={inputStyle}>
                   <option value="">Focus area…</option>
                   {focusAreas.map(fa => <option key={fa.id} value={fa.id}>{fa.title}</option>)}
                 </select>
               )}
               {goals.length > 0 && (
-                <select
-                  value={newGoalId}
-                  onChange={e => setNewGoalId(e.target.value)}
-                  className={inputClass}
-                  style={inputStyle}
-                >
+                <select value={newGoalId} onChange={e => setNewGoalId(e.target.value)} className={inputClass} style={inputStyle}>
                   <option value="">Goal…</option>
                   {goals.map(g => <option key={g.id} value={g.id}>{g.title}</option>)}
                 </select>
               )}
             </div>
-            <div className="flex justify-end">
-              <Button onClick={createProject} loading={creating} disabled={!newTitle.trim()}>
-                Create project
-              </Button>
+            <div className="flex items-center justify-between">
+              {!newDueDate && newType !== 'content' && (
+                <p className="text-xs" style={{ color: '#c07a6a' }}>Due date is required</p>
+              )}
+              <div className="ml-auto">
+                <Button onClick={createProject} loading={creating} disabled={!newTitle.trim() || (newType !== 'content' && !newDueDate)}>
+                  Create project
+                </Button>
+              </div>
             </div>
           </div>
         </div>
       )}
 
-      {!hasContent && !hasGeneral ? (
+      {isEmpty ? (
         <div className="text-center py-16">
-          <p className="text-sm font-medium mb-1" style={{ color: 'var(--foreground)' }}>No content or projects yet</p>
+          <p className="text-sm font-medium mb-1" style={{ color: 'var(--foreground)' }}>No projects yet</p>
           <p className="text-xs mb-4" style={{ color: 'var(--muted)' }}>Generate a content calendar or create your first project.</p>
           <Button size="sm" onClick={() => setShowCreate(true)}>+ New project</Button>
         </div>
       ) : (
-        <div className="space-y-10">
-
-          {/* ── Content section ── */}
-          {hasContent && (
-            <section>
-              <p className="text-xs font-semibold uppercase tracking-widest mb-4" style={{ color: 'var(--muted)' }}>
-                Content <span className="font-normal normal-case">({contentEntries.length} post{contentEntries.length !== 1 ? 's' : ''})</span>
+        <div className="space-y-8">
+          {sortedGroups.map(group => (
+            <div key={group.monthYear}>
+              <p className="text-xs font-semibold uppercase tracking-widest mb-3" style={{ color: 'var(--muted)' }}>
+                {monthLabel(group.monthYear)}{' '}
+                <span className="font-normal normal-case">
+                  ({group.calendarEntries.length + group.projects.length})
+                </span>
               </p>
-
-              {Array.from(contentByMonth.entries()).map(([monthYear, entries]) => (
-                <div key={monthYear} className="mb-6">
-                  <p className="text-xs font-medium mb-3" style={{ color: 'var(--muted)' }}>{monthLabel(monthYear)}</p>
-                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                    {entries.map(entry => renderContentCard(entry))}
-                  </div>
-                </div>
-              ))}
-            </section>
-          )}
-
-          {/* ── General / client projects section ── */}
-          {hasGeneral && (
-            <section>
-              <p className="text-xs font-semibold uppercase tracking-widest mb-4" style={{ color: 'var(--muted)' }}>
-                Projects <span className="font-normal normal-case">({activeGeneralProjects.length} active)</span>
-              </p>
-
-              {activeGeneralProjects.length > 0 && (
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 mb-6">
-                  {activeGeneralProjects.map(renderProjectCard)}
-                </div>
-              )}
-
-              {otherGeneralProjects.length > 0 && (
-                <>
-                  <p className="text-xs font-medium mb-3" style={{ color: 'var(--muted)' }}>Completed / Archived</p>
-                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                    {otherGeneralProjects.map(renderProjectCard)}
-                  </div>
-                </>
-              )}
-            </section>
-          )}
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                {group.calendarEntries.map(entry => renderContentCard(entry))}
+                {group.projects.map(project => renderProjectCard(project))}
+              </div>
+            </div>
+          ))}
         </div>
       )}
 
